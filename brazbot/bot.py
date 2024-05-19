@@ -1,7 +1,7 @@
 import json
 import asyncio
 import aiohttp
-from brazbot.events import EventHandler, on_ready, on_message_create, on_error
+from brazbot.events import EventHandler
 from brazbot.commands import CommandHandler
 from brazbot.message_handler import MessageHandler
 from brazbot.cache import Cache
@@ -46,6 +46,7 @@ class DiscordBot:
         self.heartbeat_task = None
         self.session_id = None
         self.sequence = None
+        self.cogs = []
 
         # Register events automatically
         self.auto_register_events()
@@ -74,6 +75,16 @@ class DiscordBot:
                 attr = getattr(self, attr_name)
                 if callable(attr):
                     self.event(attr)
+
+    def add_cog(self, cog):
+        self.cogs.append(cog)
+        for attr_name in dir(cog):
+            attr = getattr(cog, attr_name)
+            if callable(attr):
+                if attr_name.startswith("on_"):
+                    self.event(attr)
+                elif hasattr(attr, "_command"):
+                    self.command(attr._command["name"], attr._command["description"])(attr)
 
     async def send_heartbeat(self, ws):
         while True:

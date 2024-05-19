@@ -44,16 +44,22 @@ async def hello_command(ctx):
 @bot.command(name="echo", description="Repeats your message")
 @sync_slash_commands(guild_id=MY_GUILD)
 @rate_limit(limit=1, per=60, scope="user")
-async def echo_command(ctx, *args):
-    response = format_command_response(" ".join(args))
+async def echo_command(ctx, message: str):
+    response = format_command_response(message)
     await ctx.bot.message_handler.send_interaction(ctx.interaction, content=response, ephemeral=True)
 
 @bot.command(name="send_file", description="Sends a file")
 @sync_slash_commands(guild_id=MY_GUILD)
 @rate_limit(limit=1, per=60, scope="user")
-async def send_file_command(ctx):
-    file = File("path/to/your/file.txt")
+async def send_file_command(ctx, file: bytes):
     await ctx.bot.message_handler.send_interaction(ctx.interaction, content="Here is your file:", files=[file])
+
+@bot.command(name="multi_input", description="Accepts multiple texts")
+@sync_slash_commands(guild_id=MY_GUILD)
+@rate_limit(limit=1, per=60, scope="user")
+async def multi_input_command(ctx, texts: list):
+    text_list = texts.split(',')
+    await ctx.bot.message_handler.send_interaction(ctx.interaction, content=f"You entered: {', '.join(text_list)}")
 
 @bot.command(name="sync", description="Sync slash commands with the specified guild")
 @sync_slash_commands(guild_id=MY_GUILD)

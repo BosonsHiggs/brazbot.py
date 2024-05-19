@@ -1,0 +1,647 @@
+brazbot/bot.py:
+
+import json
+import asyncio
+import aiohttp
+from brazbot.events import EventHandler, on_ready, on_message_create, on_error
+from brazbot.commands import CommandHandler
+from brazbot.message_handler import MessageHandler
+from brazbot.cache import Cache
+
+# Mapeamento de intents
+INTENTS = {
+    "GUILDS": 1 << 0,
+    "GUILD_MEMBERS": 1 << 1,
+    "GUILD_BANS": 1 << 2,
+    "GUILD_EMOJIS_AND_STICKERS": 1 << 3,
+    "GUILD_INTEGRATIONS": 1 << 4,
+    "GUILD_WEBHOOKS": 1 << 5,
+    "GUILD_INVITES": 1 << 6,
+    "GUILD_VOICE_STATES": 1 << 7,
+    "GUILD_PRESENCES": 1 << 8,
+    "GUILD_MESSAGES": 1 << 9,
+    "GUILD_MESSAGE_REACTIONS": 1 << 10,
+    "GUILD_MESSAGE_TYPING": 1 << 11,
+    "DIRECT_MESSAGES": 1 << 12,
+    "DIRECT_MESSAGE_REACTIONS": 1 << 13,
+    "DIRECT_MESSAGE_TYPING": 1 << 14,
+    "MESSAGE_CONTENT": 1 << 15,
+    "GUILD_SCHEDULED_EVENTS": 1 << 16
+}
+
+class DiscordBot:
+    def __init__(self, token, command_prefix=None, intents=None):
+        self.token = token
+        self.command_prefix = command_prefix
+        self.intents = self.calculate_intents(intents)
+        self.base_url = "https://discord.com/api/v10"
+        self.headers = {
+            "Authorization": f"Bot {self.token}",
+            "Content-Type": "application/json"
+        }
+        self.event_handler = EventHandler()
+        self.command_handler = CommandHandler(self)
+        self.message_handler = MessageHandler(self.token)
+        self.cache = Cache()
+        self.application_id = None
+        self.heartbeat_interval = None
+        self.heartbeat_task = None
+        self.session_id = None
+        self.sequence = None
+
+        # Register events automatically
+        self.auto_register_events()
+
+    def calculate_intents(self, intents):
+        if intents is None:
+            return sum(INTENTS.values())
+        elif isinstance(intents, list):
+            return sum(INTENTS[intent] for intent in intents)
+        return intents
+
+    def event(self, func):
+        event_name = func.__name__
+        self.event_handler.register(event_name, func)
+        return func
+
+    def command(self, name=None, description=None):
+        def decorator(func):
+            self.command_handler.register_command(func, name, description)
+            return func
+        return decorator
+
+    def auto_register_events(self):
+        for attr_name in dir(self):
+            if attr_name.startswith("on_"):
+                attr = getattr(self, attr_name)
+                if callable(attr):
+                    self.event(attr)
+
+    async def send_heartbeat(self, ws):
+        while True:
+            await asyncio.sleep(self.heartbeat_interval / 1000)
+            await ws.send_json({"op": 1, "d": self.sequence})
+            print("Heartbeat sent")
+
+    async def start(self):
+        while True:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.ws_connect(f"wss://gateway.discord.gg/?v=10&encoding=json") as ws:
+                        if self.session_id and self.sequence:
+                            await ws.send_json({
+                                "op": 6,
+                                "d": {
+                                    "token": self.token,
+                                    "session_id": self.session_id,
+                                    "seq": self.sequence
+                                }
+                            })
+                            print("Resuming session")
+                        else:
+                            await ws.send_json({
+                                "op": 2,
+                                "d": {
+                                    "token": self.token,
+                                    "intents": self.intents,
+                                    "properties": {
+                                        "$os": "linux",
+                                        "$browser": "my_library",
+                                        "$device": "my_library"
+                                    }
+                                }
+                            })
+                            print("Starting new session")
+                        print("WebSocket connection established.")
+                        async for msg in ws:
+                            if msg.type == aiohttp.WSMsgType.TEXT:
+                                message = json.loads(msg.data)
+                                self.sequence = message.get('s')
+                                if message['op'] == 10:  # Opcode for Hello, contains heartbeat_interval
+                                    self.heartbeat_interval = message['d']['heartbeat_interval']
+                                    if self.heartbeat_task:
+                                        self.heartbeat_task.cancel()
+                                    self.heartbeat_task = asyncio.create_task(self.send_heartbeat(ws))
+                                if message['t'] == 'READY':
+                                    self.session_id = message['d']['session_id']
+                                    self.application_id = message['d']['application']['id']
+                                    print(f"READY message received: {message}")
+                                    await self.event_handler.handle_event({
+                                        't': 'on_ready',
+                                        'd': message['d']
+                                    })
+                                elif message['t'] == 'MESSAGE_CREATE':
+                                    print(f"Message received: {message}")
+                                    asyncio.create_task(self.event_handler.handle_event(message))
+                                    asyncio.create_task(self.command_handler.handle_command(message))
+                                elif message['t'] == 'INTERACTION_CREATE':
+                                    print(f"Interaction received: {message}")
+                                    asyncio.create_task(self.event_handler.handle_event(message))
+                                    asyncio.create_task(self.command_handler.handle_command(message))
+                                elif message['t'] == 'ERROR':
+                                    print(f"Error received: {message}")
+                                    await self.event_handler.handle_event({
+                                        't': 'on_error',
+                                        'd': message['d']
+                                    })
+                            elif msg.type in {aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSED}:
+                                print(f"WebSocket closed with message: {msg.data}")
+                                if self.heartbeat_task:
+                                    self.heartbeat_task.cancel()
+                                break
+            except Exception as e:
+                print(f"Exception in WebSocket connection: {e}")
+
+            print("Reconnecting in 5 seconds...")
+            await asyncio.sleep(5)
+
+
+brazbot/cache.py:
+
+import time
+
+class Cache:
+    def __init__(self):
+        self.cache = {}
+        self.expiry_times = {}
+
+    def set(self, key, value, ttl=300):
+        self.cache[key] = value
+        self.expiry_times[key] = time.time() + ttl
+
+    def get(self, key):
+        if key in self.cache and time.time() < self.expiry_times[key]:
+            return self.cache[key]
+        elif key in self.cache:
+            del self.cache[key]
+            del self.expiry_times[key]
+        return None
+
+
+brazbot/commands.py:
+
+import aiohttp
+
+class CommandContext:
+    def __init__(self, bot, message, interaction=None):
+        self.bot = bot
+        self.message = message
+        self.interaction = interaction
+        self.channel_id = message.get('channel_id')
+        self.author = message.get('author') or (interaction.get('member', {}).get('user') if interaction else None)
+        self.content = message.get('content')
+        self.guild_id = message.get('guild_id') if message.get('guild_id') else (interaction.get('guild_id') if interaction else None)
+        self.options = {opt['name']: opt['value'] for opt in interaction['data'].get('options', [])}
+
+class CommandHandler:
+    def __init__(self, bot):
+        self.bot = bot
+        self.commands = {}
+
+    def register_command(self, func, name=None, description=None):
+        name = name or func.__name__
+        description = description or func.__doc__ or "No description provided"
+        
+        options = []
+        for param in func.__annotations__.values():
+            if param == str:
+                options.append({"type": "STRING", "name": "text", "description": "Input text", "required": True})
+            elif param == bytes:
+                options.append({"type": "ATTACHMENT", "name": "file", "description": "The file to upload", "required": True})
+            elif param == list:
+                options.append({"type": "STRING", "name": "texts", "description": "Comma separated list of texts", "required": True})
+
+        self.commands[name] = {"func": func, "description": description, "options": options}
+
+
+    async def handle_command(self, message):
+
+        if 'content' in message['d']:
+            content = message['d']['content']
+            if self.bot.command_prefix and content.startswith(self.bot.command_prefix):
+                command_name, *args = content[len(self.bot.command_prefix):].split()
+                if command_name in self.commands:
+                    ctx = CommandContext(self.bot, message['d'])
+                    await self.commands[command_name]["func"](ctx, *args)
+        elif message['d']['type'] == 2:  # Slash command type
+            command_name = message['d']['data']['name']
+            if command_name in self.commands:
+                ctx = CommandContext(self.bot, message['d'], interaction=message['d'])
+                options = message['d']['data'].get('options', [])
+                await self.commands[command_name]["func"](ctx, **{opt['name']: opt['value'] for opt in options})
+
+    async def sync_commands(self, guild_id=None, commands=None):
+        if commands is None:
+            commands = [
+                {
+                    "name": name,
+                    "description": cmd["description"],
+                    "options": []
+                } for name, cmd in self.commands.items()
+            ]
+
+        url = f"{self.bot.base_url}/applications/{self.bot.application_id}/commands"
+        if guild_id:
+            url = f"{self.bot.base_url}/applications/{self.bot.application_id}/guilds/{guild_id}/commands"
+
+        async with aiohttp.ClientSession() as session:
+            async with session.put(url, headers=self.bot.headers, json=commands) as response:
+                if response.status != 200:
+                    print(f"Failed to sync commands: {response.status}")
+                else:
+                    print(f"Commands synced successfully: {await response.json()}")
+
+    async def get_existing_commands(self, guild_id=None):
+        url = f"{self.bot.base_url}/applications/{self.bot.application_id}/commands"
+        if guild_id:
+            url = f"{self.bot.base_url}/applications/{self.bot.application_id}/guilds/{guild_id}/commands"
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=self.bot.headers) as response:
+                if response.status == 200:
+                    return {cmd['name']: cmd for cmd in await response.json()}
+                return {}
+
+    async def send_response(self, content):
+        url = f"https://discord.com/api/v10/interactions/{self.interaction['id']}/{self.interaction['token']}/callback"
+        json_data = {
+            "type": 4,
+            "data": {
+                "content": content
+            }
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=json_data) as response:
+                return await response.json()
+
+brazbot/decorators.py:
+
+import aiohttp
+import functools
+from brazbot.cache import Cache
+
+cache = Cache()
+
+def sync_slash_commands(guild_id=None):
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(ctx, *args, **kwargs):
+            await func(ctx, *args, **kwargs)
+            await ctx.bot.command_handler.sync_commands(guild_id)
+        return wrapper
+    return decorator
+
+def is_admin():
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(ctx, *args, **kwargs):
+            guild_id = ctx.guild_id
+            author_id = ctx.author['id']
+            
+            guild_info = cache.get(f"guild_info_{guild_id}")
+            if not guild_info:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(f"https://discord.com/api/v10/guilds/{guild_id}", headers=ctx.bot.headers) as response:
+                        guild_info = await response.json()
+                cache.set(f"guild_info_{guild_id}", guild_info)
+            if guild_info.get('owner_id') == author_id:
+                return await func(ctx, *args, **kwargs)
+            
+            roles = ctx.member['roles']
+            guild_roles = cache.get(f"guild_roles_{guild_id}")
+            if not guild_roles:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(f"https://discord.com/api/v10/guilds/{guild_id}/roles", headers=ctx.bot.headers) as response:
+                        guild_roles = await response.json()
+                cache.set(f"guild_roles_{guild_id}", guild_roles)
+            admin_role_ids = [role['id'] for role in guild_roles if int(role['permissions']) & 0x8]
+            if any(role_id in roles for role_id in admin_role_ids):
+                return await func(ctx, *args, **kwargs)
+            else:
+                await ctx.bot.event_handler.handle_event({
+                    't': 'on_error',
+                    'd': {'message': 'Você precisa ser um administrador ou o dono do servidor para usar este comando.', 'channel_id': ctx.channel_id}
+                })
+        return wrapper
+    return decorator
+
+def is_owner():
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(ctx, *args, **kwargs):
+            guild_id = ctx.guild_id
+            author_id = ctx.author['id']
+            
+            guild_info = cache.get(f"guild_info_{guild_id}")
+            if not guild_info:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(f"https://discord.com/api/v10/guilds/{guild_id}", headers=ctx.bot.headers) as response:
+                        guild_info = await response.json()
+                cache.set(f"guild_info_{guild_id}", guild_info)
+            if guild_info.get('owner_id') == author_id:
+                return await func(ctx, *args, **kwargs)
+            await ctx.bot.event_handler.handle_event({
+                't': 'on_error',
+                'd': {'message': 'Você precisa ser o dono do servidor para usar este comando.', 'channel_id': ctx.channel_id}
+            })
+        return wrapper
+    return decorator
+
+def has_role(role_name):
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(ctx, *args, **kwargs):
+            roles = ctx.member['roles']
+            guild_id = ctx.guild_id
+            
+            guild_roles = cache.get(f"guild_roles_{guild_id}")
+            if not guild_roles:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(f"https://discord.com/api/v10/guilds/{guild_id}/roles", headers=ctx.bot.headers) as response:
+                        guild_roles = await response.json()
+                cache.set(f"guild_roles_{guild_id}", guild_roles)
+            role_ids = [role['id'] for role in guild_roles if role['name'] == role_name]
+            if any(role_id in roles for role_id in role_ids):
+                return await func(ctx, *args, **kwargs)
+            else:
+                await ctx.bot.event_handler.handle_event({
+                    't': 'on_error',
+                    'd': {'message': f'Você precisa do papel {role_name} para usar este comando.', 'channel_id': ctx.channel_id}
+                })
+        return wrapper
+    return decorator
+    
+def rate_limit(limit, per, scope="user"):
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(ctx, *args, **kwargs):
+            key = f"rate_limit:{scope}:{ctx.guild_id if scope == 'guild' else ctx.channel_id if scope == 'channel' else ctx.author['id']}"
+            current = cache.get(key) or 0  # Ajuste aqui
+            if current >= limit:
+                await ctx.bot.event_handler.handle_event({
+                    't': 'on_error',
+                    'd': {'message': 'Você atingiu o limite de uso deste comando.', 'time_left': per, 'channel_id': ctx.channel_id}
+                })
+            else:
+                cache.set(key, current + 1, ttl=per)
+                return await func(ctx, *args, **kwargs)
+        return wrapper
+    return decorator
+
+def command(name=None, description=None):
+    def decorator(func):
+        func._command = {
+            "name": name or func.__name__,
+            "description": description or func.__doc__ or "No description provided",
+            "options": []
+        }
+        
+        for param_name, param_type in func.__annotations__.items():
+            if param_type == str:
+                func._command['options'].append({"type": "STRING", "name": param_name, "description": "Input text", "required": True})
+            elif param_type == bytes:
+                func._command['options'].append({"type": "ATTACHMENT", "name": param_name, "description": "The file to upload", "required": True})
+            elif param_type == list:
+                func._command['options'].append({"type": "STRING", "name": param_name, "description": "Comma separated list of texts", "required": True})
+
+        return func
+    return decorator
+
+
+brazbot/events.py:
+
+class EventHandler:
+    def __init__(self):
+        self.events = {}
+
+    def register(self, event_name, func):
+        self.events[event_name] = func
+
+    async def handle_event(self, message):
+        event_type = message['t']
+        event_data = message['d']
+        if event_type in self.events:
+            await self.events[event_type](event_data)
+
+# Funções de eventos como pass
+async def on_ready(data):
+    pass
+
+async def on_message_create(data):
+    pass
+
+async def on_error(data):
+    pass
+
+
+brazbot/file.py:
+
+class File:
+    def __init__(self, file_path):
+        self.file_path = file_path
+
+    def to_dict(self):
+        return {
+            "file": open(self.file_path, 'rb')
+        }
+
+
+brazbot/responses.py:
+
+import aiohttp
+import json
+
+class InteractionResponse:
+    def __init__(self, bot, message):
+        self.bot = bot
+        self.message = message
+        self.interaction_id = message['id']
+        self.interaction_token = message['token']
+
+    async def send(self, content=None, embeds=None, embed=None, files=None, ephemeral=False):
+        url = f"https://discord.com/api/v10/interactions/{self.interaction_id}/{self.interaction_token}/callback"
+        data = {
+            "type": 4,  # Type 4 means responding with a message
+            "data": {}
+        }
+        if content:
+            data["data"]["content"] = content
+        if embeds:
+            data["data"]["embeds"] = embeds
+        if embed:
+            data["data"]["embeds"] = [embed]
+        if ephemeral:
+            data["data"]["flags"] = 64  # Ephemeral message
+
+        if files:
+            multipart_data = aiohttp.FormData()
+            multipart_data.add_field('payload_json', json.dumps(data))
+            for file in files:
+                multipart_data.add_field('file', open(file, 'rb'))
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, data=multipart_data, headers={"Authorization": f"Bot {self.bot.token}"}) as response:
+                    if response.status != 200:
+                        print(f"Failed to send interaction response: {response.status}")
+                    return await response.json()
+        else:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=data, headers={"Authorization": f"Bot {self.bot.token}"}) as response:
+                    if response.status != 200:
+                        print(f"Failed to send interaction response: {response.status}")
+                    return await response.json()
+
+
+brazbot/utils.py:
+
+def create_embed(title, description, color=0x5865F2):
+    """
+    Cria um dicionário de embed para enviar mensagens embutidas no Discord.
+
+    Args:
+        title (str): O título do embed.
+        description (str): A descrição do embed.
+        color (int, opcional): A cor do embed em formato hexadecimal. O padrão é 0x5865F2.
+
+    Returns:
+        dict: O dicionário do embed.
+    """
+    return {
+        "title": title,
+        "description": description,
+        "color": color
+    }
+
+def format_command_response(response_text, is_error=False):
+    """
+    Formata uma resposta de comando com base em se é um erro ou não.
+
+    Args:
+        response_text (str): O texto da resposta.
+        is_error (bool, opcional): Indica se a resposta é um erro. O padrão é False.
+
+    Returns:
+        dict: O dicionário da resposta formatada.
+    """
+    color = 0xFF0000 if is_error else 0x00FF00
+    return create_embed("Resposta do Comando", response_text, color)
+
+
+setup.py:
+
+from setuptools import setup, find_packages
+
+setup(
+    name="brazbot",
+    version="0.1.0",
+    description="A simple Discord bot library",
+    long_description=open("README.md").read(),
+    long_description_content_type="text/markdown",
+    author="Aril Ogai",
+    author_email="iagolirapassos@gmail.com",
+    url="https://github.com/BosonsHiggs/brazbot.py",
+    packages=find_packages(),
+    install_requires=[
+        "aiohttp"
+    ],
+    ,
+    entry_points={
+        'console_scripts': [
+            'brazbot = brazbot.bot:main',
+        ],
+    },
+    classifiers=[
+        "Programming Language :: Python :: 3.10",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+    ],
+    python_requires='>=3.10',
+)
+
+
+simple_example_interactions.py:
+
+import asyncio
+import os
+from brazbot.bot import DiscordBot
+from brazbot.decorators import is_admin, sync_slash_commands, rate_limit
+from brazbot.utils import create_embed, format_command_response
+from brazbot.file import File
+
+MY_GUILD = "1130837584742977697"
+
+class MyBot(DiscordBot):
+    def __init__(self, token, command_prefix=None, intents=None):
+        super().__init__(token, command_prefix, intents)
+
+    async def on_ready(self, data):
+        print(f"Bot is ready! Application ID: {self.application_id}")
+
+    async def on_message_create(self, data):
+        print(f"Message create event received: {data}")
+
+    async def on_error(self, data):
+        if 'time_left' in data:
+            time_left = data['time_left']
+            error_message = f"Você atingiu o limite de uso deste comando. Tente novamente em {time_left:.2f} segundos."
+            channel_id = data['channel_id']
+            await self.message_handler.send_message(channel_id, error_message)
+        else:
+            error_message = data.get('message', 'Ocorreu um erro.')
+            print(error_message)
+
+# Define os intents necessários
+intents = ["GUILD_MESSAGES", "MESSAGE_CONTENT"]
+
+token = os.getenv("DISCORD_TOKEN")
+bot = MyBot(token, command_prefix="!", intents=intents)
+
+@bot.command(name="hello", description="Says hello")
+@sync_slash_commands(guild_id=MY_GUILD)
+@is_admin()
+@rate_limit(limit=1, per=60, scope="user")
+async def hello_command(ctx):
+    embed = create_embed("Saudações", "Olá, mundo!")
+    await ctx.bot.message_handler.send_interaction(ctx.interaction, embed=embed, ephemeral=True)
+
+@bot.command(name="echo", description="Repeats your message")
+@sync_slash_commands(guild_id=MY_GUILD)
+@rate_limit(limit=1, per=60, scope="user")
+async def echo_command(ctx, message: str):
+    response = format_command_response(message)
+    await ctx.bot.message_handler.send_interaction(ctx.interaction, content=response, ephemeral=True)
+
+@bot.command(name="send_file", description="Sends a file")
+@sync_slash_commands(guild_id=MY_GUILD)
+@rate_limit(limit=1, per=60, scope="user")
+async def send_file_command(ctx, file: bytes):
+    await ctx.bot.message_handler.send_interaction(ctx.interaction, content="Here is your file:", files=[file])
+
+@bot.command(name="multi_input", description="Accepts multiple texts")
+@sync_slash_commands(guild_id=MY_GUILD)
+@rate_limit(limit=1, per=60, scope="user")
+async def multi_input_command(ctx, texts: list):
+    text_list = texts.split(',')
+    await ctx.bot.message_handler.send_interaction(ctx.interaction, content=f"You entered: {', '.join(text_list)}")
+
+@bot.command(name="sync", description="Sync slash commands with the specified guild")
+@sync_slash_commands(guild_id=MY_GUILD)
+@rate_limit(limit=1, per=3600, scope="guild")
+async def sync_command(ctx):
+    """
+    Sincroniza comandos slash com a guilda especificada.
+    
+    Args:
+        ctx (CommandContext): O contexto do comando, contendo informações sobre o bot, a mensagem, o autor, etc.
+    
+    Returns:
+        None
+    """
+    pass
+
+async def main():
+    await bot.start()
+
+# Executa o bot de forma assíncrona
+asyncio.run(main())
+
+

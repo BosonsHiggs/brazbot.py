@@ -1,9 +1,12 @@
 import aiohttp
+import logging
+
 from aiohttp import FormData
 
 class MessageHandler:
     def __init__(self, token):
         self.token = token
+        self.base_url = "https://discord.com/api/v10"
         self.headers = {
             "Authorization": f"Bot {self.token}",
             "Content-Type": "application/json"
@@ -64,3 +67,14 @@ class MessageHandler:
                 else:
                     print(f"Interaction sent: {await response.json()}")
 
+    async def send_followup_message(self, application_id, interaction_token, content):
+        url = f"{self.base_url}/webhooks/{application_id}/{interaction_token}"
+        json_data = {
+            "content": content
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=json_data) as response:
+                if response.status != 200:
+                    logging.error(f"Failed to send follow-up message: {response.status}")
+                else:
+                    logging.info("Follow-up message sent successfully")

@@ -29,3 +29,10 @@ def format_command_response(response_text, is_error=False):
     """
     color = 0xFF0000 if is_error else 0x00FF00
     return create_embed("Resposta do Comando", response_text, color)
+
+def create_error_embed(error_message):
+    return {
+        "title": "Error",
+        "description": error_message,
+        "color": 0xFF0000  # Red color for errors
+    }

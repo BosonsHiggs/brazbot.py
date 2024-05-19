@@ -109,3 +109,22 @@ def rate_limit(limit, per, scope="user"):
                 return await func(ctx, *args, **kwargs)
         return wrapper
     return decorator
+
+def command(name=None, description=None):
+    def decorator(func):
+        func._command = {
+            "name": name or func.__name__,
+            "description": description or func.__doc__ or "No description provided",
+            "options": []
+        }
+        
+        for param_name, param_type in func.__annotations__.items():
+            if param_type == str:
+                func._command['options'].append({"type": "STRING", "name": param_name, "description": "Input text", "required": True})
+            elif param_type == bytes:
+                func._command['options'].append({"type": "ATTACHMENT", "name": param_name, "description": "The file to upload", "required": True})
+            elif param_type == list:
+                func._command['options'].append({"type": "STRING", "name": param_name, "description": "Comma separated list of texts", "required": True})
+
+        return func
+    return decorator
