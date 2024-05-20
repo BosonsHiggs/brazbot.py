@@ -1,11 +1,10 @@
 import aiohttp
-from typing import Union, Literal, get_args, _GenericAlias
 import logging
-
-# Ensure Greedy is imported
+import json
+from typing import Union, Literal, get_args, _GenericAlias
 from brazbot.greedy_union import Greedy
+from brazbot.attachments import Attachment
 
-# Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
 class CommandContext:
@@ -31,8 +30,16 @@ class CommandContext:
                 else:
                     logging.info("Interaction deferred successfully")
 
-    async def send_followup_message(self, content):
-        await self.bot.message_handler.send_followup_message(self.bot.application_id, self.interaction['token'], content)
+    async def send_followup_message(self, content=None, embed=None, embeds=None, files=None, ephemeral=False):
+        await self.bot.message_handler.send_followup_message(
+            self.bot.application_id, 
+            self.interaction['token'], 
+            content=content, 
+            embed=embed, 
+            embeds=embeds, 
+            files=files, 
+            ephemeral=ephemeral
+        )
 
 class CommandHandler:
     def __init__(self, bot):
@@ -50,8 +57,14 @@ class CommandHandler:
                 option["type"] = 3  # STRING
             elif param == int:
                 option["type"] = 4  # INTEGER
+            elif param == float:
+                option["type"] = 10  # NUMBER
+            elif param == bytes:  # Handle file attachments
+                option["type"] = 11  # ATTACHMENT
             elif param == bool:
                 option["type"] = 5  # BOOLEAN
+            elif param == Attachment:
+                option["type"] = 11  # ATTACHMENT
             elif isinstance(param, _GenericAlias) and param.__origin__ is Literal:
                 option["type"] = 3  # STRING
                 option["choices"] = [{"name": v, "value": v} for v in get_args(param)]
@@ -61,6 +74,13 @@ class CommandHandler:
             elif isinstance(param, _GenericAlias) and param.__origin__ is Greedy:
                 option["type"] = 3  # STRING
                 option["required"] = False
+            elif isinstance(param, _GenericAlias) and param.__origin__ is Union:
+                if str in param.__args__:
+                    option["type"] = 3
+                if int in param.__args__:
+                    option["type"] = 4
+                if float in param.__args__:
+                    option["type"] = 10
             options.append(option)
 
         self.commands[name] = {
@@ -86,33 +106,52 @@ class CommandHandler:
                 options = message['d']['data'].get('options', [])
                 await self.commands[command_name]["func"](ctx, **{opt['name']: opt['value'] for opt in options})
 
+    async def sync_commands(self, guild_id=None):
+        current_commands = [
+            {
+                "name": name,
+                "description": cmd["description"],
+                "options": cmd["options"],
+                "type": 1  # 1 indicates a CHAT_INPUT command
+            } for name, cmd in self.commands.items()
+        ]
 
-    async def sync_commands(self, guild_id=None, commands=None):
-        if commands is None:
-            commands = [
-                {
-                    "name": name,
-                    "description": cmd["description"],
-                    "options": cmd["options"],
-                    "type": cmd["type"]  # Ensure the command type is included
-                } for name, cmd in self.commands.items()
-            ]
+        existing_commands = await self.get_existing_commands(guild_id)
+        transformed_existing_commands = [
+            {
+                "name": cmd['name'],
+                "description": cmd['description'],
+                "options": [
+                    {
+                        "name": opt['name'],
+                        "description": opt.get('description', ''),
+                        "type": opt['type'],
+                        "required": opt.get('required', False)
+                    } for opt in cmd.get('options', [])
+                ],
+                "type": cmd['type']
+            } for cmd in existing_commands.values()
+        ]
 
-        url = f"{self.bot.base_url}/applications/{self.bot.application_id}/commands"
-        if guild_id:
-            url = f"{self.bot.base_url}/applications/{self.bot.application_id}/guilds/{guild_id}/commands"
+        print()
+        print(current_commands, "\n", transformed_existing_commands)
+        print()
 
-        logging.debug(f"Syncing commands to URL: {url}")
-        logging.debug(f"Payload: {commands}")
+        if self.commands_changed(current_commands, transformed_existing_commands):
+            url = f"{self.bot.base_url}/applications/{self.bot.application_id}/commands"
+            if guild_id:
+                url = f"{self.bot.base_url}/applications/{self.bot.application_id}/guilds/{guild_id}/commands"
 
-        async with aiohttp.ClientSession() as session:
-            async with session.put(url, headers=self.bot.headers, json=commands) as response:
-                response_text = await response.text()
-                if response.status != 200:
-                    logging.error(f"Failed to sync commands: {response.status}")
-                    logging.error(f"Response: {response_text}")
-                else:
-                    logging.info(f"Commands synced successfully: {response_text}")
+            async with aiohttp.ClientSession() as session:
+                async with session.put(url, headers=self.bot.headers, json=current_commands) as response:
+                    response_text = await response.text()
+                    if response.status != 200:
+                        logging.error(f"Failed to sync commands: {response.status}")
+                        logging.error(f"Response: {response_text}")
+                    else:
+                        logging.info("Commands synced successfully: " + response_text)
+        else:
+            logging.info("No changes in commands. Sync skipped.")
 
     async def get_existing_commands(self, guild_id=None):
         url = f"{self.bot.base_url}/applications/{self.bot.application_id}/commands"
@@ -136,3 +175,21 @@ class CommandHandler:
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=json_data) as response:
                 return await response.json()
+    
+    def commands_changed(self, current_commands, existing_commands):
+        if len(current_commands) != len(existing_commands):
+            logging.debug("Number of commands changed.")
+            return True
+
+        for current, existing in zip(current_commands, existing_commands):
+            if current["name"] != existing["name"]:
+                logging.debug(f"Command name changed: {current['name']} != {existing['name']}")
+                return True
+            if current["description"] != existing["description"]:
+                logging.debug(f"Description for command {current['name']} changed: {current['description']} != {existing['description']}")
+                return True
+            if current["options"] != existing["options"]:
+                logging.debug(f"Options for command {current['name']} changed.")
+                return True
+
+        return False

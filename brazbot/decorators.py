@@ -10,6 +10,8 @@ def sync_slash_commands(guild_id=None):
         async def wrapper(ctx, *args, **kwargs):
             await func(ctx, *args, **kwargs)
             await ctx.bot.command_handler.sync_commands(guild_id)
+        wrapper._slash_command = True
+        wrapper._guild_id = guild_id
         return wrapper
     return decorator
 
@@ -120,11 +122,11 @@ def command(name=None, description=None):
         
         for param_name, param_type in func.__annotations__.items():
             if param_type == str:
-                func._command['options'].append({"type": "STRING", "name": param_name, "description": "Input text", "required": True})
+                func._command['options'].append({"type": 3, "name": param_name, "description": "Input text", "required": True})
             elif param_type == bytes:
-                func._command['options'].append({"type": "ATTACHMENT", "name": param_name, "description": "The file to upload", "required": True})
+                func._command['options'].append({"type": 11, "name": param_name, "description": "The file to upload", "required": True})
             elif param_type == list:
-                func._command['options'].append({"type": "STRING", "name": param_name, "description": "Comma separated list of texts", "required": True})
+                func._command['options'].append({"type": 3, "name": param_name, "description": "Comma separated list of texts", "required": True})
 
         return func
     return decorator

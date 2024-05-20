@@ -43,7 +43,7 @@ async def helloname_command(ctx, name: str):
 @sync_slash_commands(guild_id=MY_GUILD)
 @rate_limit(limit=1, per=60, scope="user")
 async def status_command(ctx, status: Literal['online', 'offline', 'idle']):
-    await ctx.bot.message_handler.send_interaction(ctx.interaction, content=f"Setting status to {status}")
+    await ctx.bot.message_handler.send_interaction(ctx.interaction, content=f"Setting status to {status}", ephemeral=True)
 
 # Main function to start the bot
 async def main():

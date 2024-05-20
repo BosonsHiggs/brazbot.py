@@ -5,6 +5,8 @@ from brazbot.cogs import Cog
 # Inicialize o bot com o token e prefixo de comando
 bot = DiscordBot(token=os.getenv("DISCORD_TOKEN"), command_prefix="!", intents=["GUILD_MESSAGES", "MESSAGE_CONTENT"])
 
+MY_GUILD = "1130837584742977697"
+   
 class MyCog(Cog):
     def __init__(self, bot):
         super().__init__(bot)

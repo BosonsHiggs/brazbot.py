@@ -1,5 +1,6 @@
 import aiohttp
 import logging
+import json
 
 from aiohttp import FormData
 
@@ -8,8 +9,7 @@ class MessageHandler:
         self.token = token
         self.base_url = "https://discord.com/api/v10"
         self.headers = {
-            "Authorization": f"Bot {self.token}",
-            "Content-Type": "application/json"
+            "Authorization": f"Bot {self.token}"
         }
 
     async def send_message(self, channel_id, content):
@@ -54,27 +54,57 @@ class MessageHandler:
             data["data"]["embeds"] = [embed]
         if embeds:
             data["data"]["embeds"] = embeds
-        if files:
-            data["data"]["attachments"] = files
         if ephemeral:
             data["data"]["flags"] = 64  # This flag makes the response ephemeral
 
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=self.headers, json=data) as response:
-                if response.status != 200:
-                    print(f"Failed to send interaction: {response.status}")
-                    print(await response.text())
-                else:
-                    print(f"Interaction sent: {await response.json()}")
+            if files:
+                form = FormData()
+                form.add_field('payload_json', json.dumps(data))
+                for file in files:
+                    form.add_field('file', file['data'], filename=file['filename'], content_type=file['content_type'])
+                async with session.post(url, headers={"Authorization": self.headers["Authorization"]}, data=form) as response:
+                    if response.status != 200:
+                        print(f"Failed to send interaction: {response.status}")
+                        print(await response.text())
+                    else:
+                        print(f"Interaction sent: {await response.json()}")
+            else:
+                async with session.post(url, headers=self.headers, json=data) as response:
+                    if response.status != 200:
+                        print(f"Failed to send interaction: {response.status}")
+                        print(await response.text())
+                    else:
+                        print(f"Interaction sent: {await response.json()}")
 
-    async def send_followup_message(self, application_id, interaction_token, content):
+    async def send_followup_message(self, application_id, interaction_token, content=None, embed=None, embeds=None, files=None, ephemeral=False):
         url = f"{self.base_url}/webhooks/{application_id}/{interaction_token}"
-        json_data = {
-            "content": content
-        }
+        data = {}
+        if content:
+            data["content"] = str(content)  # Ensure content is a string
+        if embed:
+            data["embeds"] = [embed]
+        if embeds:
+            data["embeds"] = embeds
+        if ephemeral:
+            data["flags"] = 64  # This flag makes the response ephemeral
+
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=json_data) as response:
-                if response.status != 200:
-                    logging.error(f"Failed to send follow-up message: {response.status}")
-                else:
-                    logging.info("Follow-up message sent successfully")
+            if files:
+                form = FormData()
+                form.add_field('payload_json', json.dumps(data))
+                for file in files:
+                    form.add_field('file', file['data'], filename=file['filename'], content_type=file['content_type'])
+                async with session.post(url, headers={"Authorization": self.headers["Authorization"]}, data=form) as response:
+                    if response.status != 200:
+                        print(f"Failed to send follow-up message: {response.status}")
+                        print(await response.text())
+                    else:
+                        print(f"Follow-up message sent: {await response.json()}")
+            else:
+                async with session.post(url, headers=self.headers, json=data) as response:
+                    if response.status != 200:
+                        print(f"Failed to send follow-up message: {response.status}")
+                        print(await response.text())
+                    else:
+                        print(f"Follow-up message sent: {await response.json()}")

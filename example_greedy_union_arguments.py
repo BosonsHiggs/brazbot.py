@@ -21,13 +21,6 @@ class MyBot(DiscordBot):
 
     async def on_error(self, data):
         if 'time_left' in data:
-            print()
-            print(self, data)
-            print()
-            print(f"SELF: {dir(self)}")
-            print()
-            print(f"DATA: {dir(data)}")
-            print()
             time_left = data['time_left']
             error_message = f"Você atingiu o limite de uso deste comando. Tente novamente em {time_left:.2f} segundos."
 
@@ -50,14 +43,14 @@ intents = ["GUILD_MESSAGES", "MESSAGE_CONTENT"]
 token = os.getenv("DISCORD_TOKEN")
 bot = MyBot(token, command_prefix="!", intents=intents)
 
-@bot.command(name="multiply", description="Multiply numbers")
+@bot.command(name="multiply", description="Multiply numbers only")
 @sync_slash_commands(guild_id=MY_GUILD)
 @rate_limit(limit=1, per=60, scope="user")
 async def multiply_command(ctx, numbers: Greedy[Union[int, float]]):
     await ctx.defer()  # Defer the response
     result = 1
-    for num in numbers:
-        result *= num
+    for num in numbers.split(" "):
+        result *= int(num)
     await ctx.send_followup_message(content=f"The result is {result}")
 
 @bot.command(name="quickreply", description="Quick reply example")
