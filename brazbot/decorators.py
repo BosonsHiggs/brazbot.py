@@ -15,6 +15,15 @@ def sync_slash_commands(guild_id=None):
         return wrapper
     return decorator
 
+def describe(**descriptions):
+    def decorator(func):
+        if not hasattr(func, "parameter_descriptions"):
+            func.parameter_descriptions = {}
+        func.parameter_descriptions.update(descriptions)
+        return func
+    return decorator
+
+
 def is_admin():
     def decorator(func):
         @functools.wraps(func)

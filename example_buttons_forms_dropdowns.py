@@ -54,7 +54,7 @@ async def button_command(ctx):
         logging.debug(f"Button: {button.to_dict()}")
         await ctx.send_followup_message(content="Here is a button:", components=button)
     except Exception as e:
-        logging.error(f"Error in button_command: {e}")
+        print(f"Error in button_command: {e}")
 
 @bot.command(name="dropdown", description="Send a dropdown")
 @sync_slash_commands(guild_id=MY_GUILD)

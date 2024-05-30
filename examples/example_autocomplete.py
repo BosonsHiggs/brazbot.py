@@ -4,7 +4,7 @@ import aiohttp
 import logging
 import os
 from brazbot.bot import DiscordBot
-from brazbot.decorators import is_admin, sync_slash_commands, rate_limit
+from brazbot.decorators import is_admin, sync_slash_commands, rate_limit, describe
 from brazbot.autocomplete import autocomplete_command
 
 # Define os intents necessários
@@ -17,9 +17,13 @@ class MyBot(DiscordBot):
     def __init__(self, token, command_prefix=None, intents=None):
         super().__init__(token, command_prefix, intents)
 
+    async def setup_hook(self):
+        await self.command_handler.sync_commands(guild_id=MY_GUILD)
+        # Custom setup actions before connecting to Discord
+        print("Running setup_hook...")
+
     async def on_ready(self, data):
         print(f"Bot is ready! Application ID: {self.application_id}")
-        #await self.command_handler.sync_commands(guild_id=MY_GUILD)
 
 
     async def on_interaction_create(self, interaction):
@@ -38,6 +42,7 @@ bot = MyBot(token, command_prefix="!", intents=intents)
 @autocomplete_command(bot, name="search", description="Search for items")
 @sync_slash_commands(guild_id=MY_GUILD)
 @rate_limit(limit=1, per=60, scope="user")
+@describe(query="The search term to look for")
 async def search_command(ctx, query: str):
     await ctx.defer()
     await ctx.send_followup_message(content=f"The option chosen was {query}.")
@@ -53,17 +58,8 @@ async def autocomplete_query(interaction):
             {"name": "Suggestion 2", "value": "suggestion_2"},
             {"name": "Suggestion 3", "value": "suggestion_3"}
         ]
-        response_data = {
-            "type": 8,  # Autocomplete result type
-            "data": {
-                "choices": suggestions
-            }
-        }
-        url = f"https://discord.com/api/v10/interactions/{interaction['id']}/{interaction['token']}/callback"
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=response_data) as response:
-                if response.status != 200:
-                    logging.error(f"Failed to send autocomplete response: {response.status}")
+        
+        await bot.command_handler.send_autocomplete_response(interaction, suggestions)
 
 bot.command_handler.register_autocomplete(autocomplete_query, "search", "query")
 

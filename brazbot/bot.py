@@ -2,6 +2,7 @@ import json
 import asyncio
 import aiohttp
 import logging
+from aiohttp import ClientResponseError
 from brazbot.events import EventHandler
 from brazbot.commands import CommandHandler
 from brazbot.message_handler import MessageHandler
@@ -30,13 +31,14 @@ INTENTS = {
 
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger().setLevel(logging.CRITICAL)
-#logging.getLogger().addHandler(logging.NullHandler())
 
 class DiscordBot:
-    def __init__(self, token, command_prefix=None, intents=None):
+    def __init__(self, token, command_prefix=None, intents=None, num_shards=1, shard_id=0):
         self.token = token
         self.command_prefix = command_prefix
         self.intents = self.calculate_intents(intents)
+        self.num_shards = num_shards
+        self.shard_id = shard_id
         self.base_url = "https://discord.com/api/v10"
         self.headers = {
             "Authorization": f"Bot {self.token}",
@@ -91,16 +93,43 @@ class DiscordBot:
                 elif hasattr(attr, "_command"):
                     self.command(attr._command["name"], attr._command["description"])(attr)
 
+    async def setup_hook(self):
+        pass
+
     async def send_heartbeat(self, ws):
         while True:
             await asyncio.sleep(self.heartbeat_interval / 1000)
             await ws.send_json({"op": 1, "d": self.sequence})
 
+    async def handle_rate_limit(self, response):
+        if response.status == 429:
+            retry_after = int(response.headers.get("Retry-After", 1))
+            is_global = response.headers.get("X-RateLimit-Global", False)
+            rate_limit_scope = response.headers.get("X-RateLimit-Scope", "unknown")
+            
+            logging.error(f"Rate limited. Retry after {retry_after} seconds. Scope: {rate_limit_scope}. Global: {is_global}")
+            await asyncio.sleep(retry_after)
+
     async def start(self):
+        await self.setup_hook()
         while True:
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.ws_connect(f"wss://gateway.discord.gg/?v=10&encoding=json") as ws:
+                        identify_payload = {
+                            "op": 2,
+                            "d": {
+                                "token": self.token,
+                                "intents": self.intents,
+                                "properties": {
+                                    "$os": "linux",
+                                    "$browser": "my_library",
+                                    "$device": "my_library"
+                                },
+                                "shard": [self.shard_id, self.num_shards]
+                            }
+                        }
+
                         if self.session_id and self.sequence:
                             await ws.send_json({
                                 "op": 6,
@@ -111,18 +140,7 @@ class DiscordBot:
                                 }
                             })
                         else:
-                            await ws.send_json({
-                                "op": 2,
-                                "d": {
-                                    "token": self.token,
-                                    "intents": self.intents,
-                                    "properties": {
-                                        "$os": "linux",
-                                        "$browser": "my_library",
-                                        "$device": "my_library"
-                                    }
-                                }
-                            })
+                            await ws.send_json(identify_payload)
 
                         async for msg in ws:
                             if msg.type == aiohttp.WSMsgType.TEXT:
@@ -159,13 +177,10 @@ class DiscordBot:
                                 if self.heartbeat_task:
                                     self.heartbeat_task.cancel()
                                 break
-            except aiohttp.ClientResponseError as e:
-                if e.status == 429:  # Rate limit
-                    retry_after = int(e.headers.get("Retry-After", 1))
-                    logging.error(f"Rate limited. Retrying after {retry_after} seconds.")
-                    await asyncio.sleep(retry_after)
-                else:
-                    print(f"Exception in WebSocket connection: {e}")
+            except ClientResponseError as e:
+                await self.handle_rate_limit(e.response)
+            except Exception as e:
+                logging.error(f"Unexpected exception: {e}")
 
             print("Reconnecting in 5 seconds...")
             await asyncio.sleep(5)

@@ -6,7 +6,7 @@ from brazbot.greedy_union import Greedy
 from brazbot.attachments import Attachment
 
 logging.basicConfig(level=logging.DEBUG)
-logging.getLogger().setLevel(logging.CRITICAL)
+#logging.getLogger().setLevel(logging.CRITICAL)
 
 class CommandContext:
     def __init__(self, bot, message, interaction=None):
@@ -56,7 +56,7 @@ class CommandHandler:
 
         options = []
         for param_name, param in func.__annotations__.items():
-            option = {"name": param_name, "description": param_name, "required": True}
+            option = {"name": param_name, "required": True}
             if param == str:
                 option["type"] = 3  # STRING
                 if hasattr(func, "autocomplete_options") and param_name in func.autocomplete_options:
@@ -87,6 +87,12 @@ class CommandHandler:
                     option["type"] = 4
                 if float in param.__args__:
                     option["type"] = 10
+
+            if hasattr(func, "parameter_descriptions") and param_name in func.parameter_descriptions:
+                option["description"] = func.parameter_descriptions[param_name]
+            else:
+                option["description"] = param_name  # Default to the parameter name if no description is provided
+
             options.append(option)
 
         self.commands[name] = {
@@ -95,6 +101,7 @@ class CommandHandler:
             "options": options,
             "type": 1  # 1 indicates a CHAT_INPUT command
         }
+
         #logging.debug(f"Registered command: {name} with options: {options}")
 
     def register_autocomplete(self, func, command_name, option_name):
@@ -106,6 +113,20 @@ class CommandHandler:
                 self.autocomplete_functions[(command_name, option_name)] = func
                 return
         raise ValueError(f"Option '{option_name}' not found in command '{command_name}'")
+
+    async def send_autocomplete_response(self, interaction, suggestions):
+        response_data = {
+            "type": 8,  # Autocomplete result type
+            "data": {
+                "choices": suggestions
+            }
+        }
+        url = f"https://discord.com/api/v10/interactions/{interaction['id']}/{interaction['token']}/callback"
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=response_data) as response:
+                if response.status != 200:
+                    logging.error(f"Failed to send autocomplete response: {response.status}")
+
 
     async def handle_autocomplete(self, interaction):
         command_name = interaction['data']['name']

@@ -31,8 +31,9 @@ bot = MyBot(token, command_prefix="!", intents=intents)
 @sync_slash_commands(guild_id=MY_GUILD)
 @rate_limit(limit=1, per=60, scope="user")
 async def greet_command(ctx, user: Optional[str] = None):
+    await ctx.defer()
     greeting = f"Hello, {user}!" if user else "Hello!"
-    await ctx.bot.message_handler.send_message(ctx.channel_id, content=greeting)
+    await ctx.send_followup_message(content=greeting)
 
 # Main function to start the bot
 async def main():
