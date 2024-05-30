@@ -11,15 +11,15 @@ token = os.getenv("DISCORD_TOKEN")
 bot = DiscordBot(token, command_prefix="!", intents=intents)
 
 @bot.event
-async def on_ready(bot, data, message):
+async def on_ready(data):
     print(f"Bot is ready! Application ID: {bot.application_id}")
 
 @bot.event
-async def on_message_create(bot, data, message):
+async def on_message_create(data):
     print(f"Message create event received: {data}")
 
 @bot.event
-async def on_error(bot, data, message):
+async def on_error(data):
     if 'time_left' in data:
         time_left = data['time_left']
         error_message = f"Você atingiu o limite de uso deste comando. Tente novamente em {time_left:.2f} segundos."

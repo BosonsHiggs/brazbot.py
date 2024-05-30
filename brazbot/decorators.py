@@ -100,7 +100,7 @@ def rate_limit(limit, per, scope="user"):
         @functools.wraps(func)
         async def wrapper(ctx, *args, **kwargs):
             key = f"rate_limit:{scope}:{ctx.guild_id if scope == 'guild' else ctx.channel_id if scope == 'channel' else ctx.author['id']}"
-            current = cache.get(key) or 0  # Ajuste aqui
+            current = cache.get(key) or 0
             if current >= limit:
                 await ctx.bot.event_handler.handle_event({
                     't': 'on_error',
@@ -121,12 +121,15 @@ def command(name=None, description=None):
         }
         
         for param_name, param_type in func.__annotations__.items():
+            option = {"name": param_name, "description": "Input text", "required": True}
             if param_type == str:
-                func._command['options'].append({"type": 3, "name": param_name, "description": "Input text", "required": True})
+                option["type"] = 3  # STRING
             elif param_type == bytes:
-                func._command['options'].append({"type": 11, "name": param_name, "description": "The file to upload", "required": True})
+                option["type"] = 11  # ATTACHMENT
             elif param_type == list:
-                func._command['options'].append({"type": 3, "name": param_name, "description": "Comma separated list of texts", "required": True})
+                option["type"] = 3
+                option["description"] = "Comma separated list of texts"
+            func._command['options'].append(option)
 
         return func
     return decorator

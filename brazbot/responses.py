@@ -1,6 +1,3 @@
-import aiohttp
-import json
-
 class InteractionResponse:
     def __init__(self, bot, message):
         self.bot = bot
@@ -31,11 +28,11 @@ class InteractionResponse:
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, data=multipart_data, headers={"Authorization": f"Bot {self.bot.token}"}) as response:
                     if response.status != 200:
-                        print(f"Failed to send interaction response: {response.status}")
+                        logging.error(f"Failed to send interaction response: {response.status} - {await response.text()}")
                     return await response.json()
         else:
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, json=data, headers={"Authorization": f"Bot {self.bot.token}"}) as response:
                     if response.status != 200:
-                        print(f"Failed to send interaction response: {response.status}")
+                        logging.error(f"Failed to send interaction response: {response.status} - {await response.text()}")
                     return await response.json()

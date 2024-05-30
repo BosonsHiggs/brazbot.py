@@ -43,28 +43,17 @@ intents = ["GUILD_MESSAGES", "MESSAGE_CONTENT"]
 token = os.getenv("DISCORD_TOKEN")
 bot = MyBot(token, command_prefix="!", intents=intents)
 
-@bot.command(name="multiply", description="Multiply numbers")
+@bot.command(name="rate_limits", description="Check rate limits")
 @sync_slash_commands(guild_id=MY_GUILD)
-@rate_limit(limit=1, per=60, scope="user")
-async def multiply_command(ctx, numbers: Greedy[Union[int, float]]):
-    print("---------------------------------------------")
-    await ctx.defer()  # Defer the response
-    print("---------------------------------------------")
-    try:
-        result = 1
+async def rate_limits_command(ctx):
+    print()
+    print()
+    print("TESTE")
+    rate_limits = await ctx.bot.command_handler.check_rate_limits()
+    print(rate_limits)
+    formatted_info = "\n".join([f"{info['endpoint']}:\nLimit: {info['limit']}\nRemaining: {info['remaining']}\nReset: {info['reset']}\nReset After: {info['reset_after']}\nBucket: {info['bucket']}\nRetry After: {info['retry_after']}\nGlobal: {info['global']}\n" for info in rate_limits])
+    await ctx.send_followup_message(content=f"Rate limit information:\n{formatted_info}")
 
-        for num in numbers:
-            result *= num
-
-        await ctx.send_followup_message(content=f"The result is {result}")
-    except Exception as e:
-        print(e)
-
-@bot.command(name="quickreply", description="Quick reply example")
-@sync_slash_commands(guild_id=MY_GUILD)
-@rate_limit(limit=1, per=60, scope="user")
-async def quickreply_command(ctx):
-    await ctx.bot.message_handler.send_interaction(ctx.interaction, content="This is a quick reply!")
 
 # Main function to start the bot
 async def main():

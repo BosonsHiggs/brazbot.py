@@ -10,13 +10,3 @@ class EventHandler:
         event_data = message['d']
         if event_type in self.events:
             await self.events[event_type](event_data)
-
-# Funções de eventos como pass
-async def on_ready(data):
-    pass
-
-async def on_message_create(data):
-    pass
-
-async def on_error(data):
-    pass
