@@ -1,3 +1,6 @@
+
+import uuid
+
 def create_embed(title, description, color=0x5865F2):
     """
     Cria um dicionário de embed para enviar mensagens embutidas no Discord.
@@ -36,3 +39,28 @@ def create_error_embed(error_message):
         "description": error_message,
         "color": 0xFF0000  # Red color for errors
     }
+
+def generate_unique_id(max_length=8):
+    """
+    Generates a unique integer ID of the specified length.
+
+     Args:
+     max_length (int, optional): The maximum length desired for the ID.
+     The default value is 8.
+
+     Returns:
+     int: A unique integer ID with the specified length.
+    """
+    # Gerar um UUID
+    unique_id = uuid.uuid4()
+    
+    # Converter o UUID para uma string hexadecimal
+    hex_string = str(unique_id.hex)
+    
+    # Reduzir o tamanho da string hexadecimal para o comprimento especificado
+    shortened_hex = hex_string[:max_length]
+    
+    # Converter a string hexadecimal encurtada de volta para um inteiro
+    shortened_int = int(shortened_hex, 16)
+    
+    return shortened_int

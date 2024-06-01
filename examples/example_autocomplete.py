@@ -1,6 +1,5 @@
 import json
 import asyncio
-import aiohttp
 import logging
 import os
 from brazbot.bot import DiscordBot

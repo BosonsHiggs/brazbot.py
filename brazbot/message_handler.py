@@ -4,6 +4,12 @@ import asyncio
 import json
 from aiohttp import FormData
 
+"""
+SEE:    1. https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-response-object
+        2. https://discord.com/developers/docs/topics/rate-limits#global-rate-limit
+        3. https://discord.com/developers/docs/resources/webhook#edit-webhook-message
+"""
+
 class MessageHandler:
     def __init__(self, token):
         self.token = token
@@ -49,6 +55,40 @@ class MessageHandler:
                     else:
                         response_json = await response.json()
                         logging.info(f"File sent: {response_json}")
+                        return response_json
+
+    async def edit_message(self, channel_id, message_id, content=None, embed=None, files=None, components=None):
+        url = f"{self.base_url}/channels/{channel_id}/messages/{message_id}"
+        data = {}
+        if content:
+            data["content"] = content
+        if embed:
+            data["embeds"] = [embed] if isinstance(embed, dict) else embed
+        if components:
+            data["components"] = components
+
+        async with aiohttp.ClientSession() as session:
+            if files:
+                form = FormData()
+                form.add_field('payload_json', json.dumps(data))
+                for file in files:
+                    form.add_field('file', file['data'], filename=file['filename'], content_type=file['content_type'])
+                async with session.patch(url, headers=self.headers, data=form) as response:
+                    if response.status != 200:
+                        logging.error(f"Failed to edit message with file: {response.status} - {await response.text()}")
+                        return None
+                    else:
+                        response_json = await response.json()
+                        logging.info(f"Message edited with file: {response_json}")
+                        return response_json
+            else:
+                async with session.patch(url, headers=self.headers, json=data) as response:
+                    if response.status != 200:
+                        logging.error(f"Failed to edit message: {response.status} - {await response.text()}")
+                        return None
+                    else:
+                        response_json = await response.json()
+                        logging.info(f"Message edited: {response_json}")
                         return response_json
 
     async def send_interaction(self, interaction, content=None, embed=None, embeds=None, files=None, components=None, ephemeral=False):
@@ -152,39 +192,27 @@ class MessageHandler:
                         logging.info(f"Follow-up message sent: {response_json}")
                         return response_json
 
-    async def edit_message(self, channel_id, message_id, content=None, embed=None, files=None, components=None):
-        url = f"{self.base_url}/channels/{channel_id}/messages/{message_id}"
-        data = {}
-        if content:
-            data["content"] = content
-        if embed:
-            data["embeds"] = [embed] if isinstance(embed, dict) else embed
-        if components:
-            data["components"] = components
+
+    #https://discord.com/developers/docs/interactions/message-components#text-inputs
+    async def send_modal(self, interaction, title, custom_id, data):
+        url = f"{self.base_url}/interactions/{interaction['id']}/{interaction['token']}/callback"
+
+        logging.debug(f"send_modal payload: {json.dumps(data, indent=2)}")
 
         async with aiohttp.ClientSession() as session:
-            if files:
-                form = FormData()
-                form.add_field('payload_json', json.dumps(data))
-                for file in files:
-                    form.add_field('file', file['data'], filename=file['filename'], content_type=file['content_type'])
-                async with session.patch(url, headers=self.headers, data=form) as response:
-                    if response.status != 200:
-                        logging.error(f"Failed to edit message with file: {response.status} - {await response.text()}")
-                        return None
-                    else:
-                        response_json = await response.json()
-                        logging.info(f"Message edited with file: {response_json}")
-                        return response_json
-            else:
-                async with session.patch(url, headers=self.headers, json=data) as response:
-                    if response.status != 200:
-                        logging.error(f"Failed to edit message: {response.status} - {await response.text()}")
-                        return None
-                    else:
-                        response_json = await response.json()
-                        logging.info(f"Message edited: {response_json}")
-                        return response_json
+            async with session.post(url, headers=self.headers, json=data) as response:
+                if response.status == 429:  # Rate limit
+                    retry_after = int(response.headers.get("Retry-After", 1))
+                    logging.error(f"Rate limited. Retrying after {retry_after} seconds.")
+                    #await asyncio.sleep(retry_after)
+                    return await self.send_modal(interaction, title, custom_id, components)
+                elif response.status != 200:
+                    logging.error(f"Failed to send modal: {response.status} - {await response.text()}")
+                    return None
+                else:
+                    response_json = await response.json()
+                    logging.info(f"Modal sent: {response_json}")
+                    return response_json
 
     async def delete_message(self, channel_id, message_id):
         url = f"{self.base_url}/channels/{channel_id}/messages/{message_id}"

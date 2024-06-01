@@ -8,7 +8,6 @@ class Button:
         self.emoji = emoji
 
     def to_dict(self):
-
         data = {
             "type": 2,
             "label": self.label,
@@ -21,13 +20,9 @@ class Button:
             data["url"] = self.url
         if self.emoji:
             data["emoji"] = self.emoji
-        
-        components = [
-            {
-                "type": 1,
-                "components": [
-                    data
-                ]
-            }
-        ]
-        return components
+
+        return data
+
+    @property
+    def to_component(self):
+        return {"type": 1, "components": [self.to_dict()]}

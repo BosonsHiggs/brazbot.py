@@ -7,6 +7,10 @@ from brazbot.events import EventHandler
 from brazbot.commands import CommandHandler
 from brazbot.message_handler import MessageHandler
 from brazbot.cache import Cache
+"""
+SEE: 
+    1. https://discord.com/developers/docs/topics/rate-limits#global-rate-limit
+"""
 
 # Mapeamento de intents
 INTENTS = {
@@ -32,6 +36,7 @@ INTENTS = {
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger().setLevel(logging.CRITICAL)
 
+#OP codes: https://discord.com/developers/docs/topics/opcodes-and-status-codes
 class DiscordBot:
     def __init__(self, token, command_prefix=None, intents=None, num_shards=1, shard_id=0):
         self.token = token
@@ -44,6 +49,7 @@ class DiscordBot:
             "Authorization": f"Bot {self.token}",
             "Content-Type": "application/json"
         }
+
         self.event_handler = EventHandler()
         self.command_handler = CommandHandler(self)
         self.message_handler = MessageHandler(self.token)
@@ -110,6 +116,25 @@ class DiscordBot:
             logging.error(f"Rate limited. Retry after {retry_after} seconds. Scope: {rate_limit_scope}. Global: {is_global}")
             await asyncio.sleep(retry_after)
 
+    async def change_presence(self, activity_name, activity_type=0):
+        presence_payload = {
+            "op": 3,
+            "d": {
+                "since": None,
+                "activities": [
+                    {
+                        "name": activity_name,
+                        "type": activity_type
+                    }
+                ],
+                "status": "online",
+                "afk": False
+            }
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.ws_connect("wss://gateway.discord.gg/?v=10&encoding=json") as ws:
+                await ws.send_json(presence_payload)
+
     async def start(self):
         await self.setup_hook()
         while True:
@@ -143,6 +168,29 @@ class DiscordBot:
                             await ws.send_json(identify_payload)
 
                         async for msg in ws:
+                            """
+                            NAME    DESCRIPTION
+                            READY   non-subscription event sent immediately after connecting, contains server information
+                            ERROR   non-subscription event sent when there is an error, including command responses
+                            GUILD_STATUS    sent when a subscribed server's state changes
+                            GUILD_CREATE    sent when a guild is created/joined on the client
+                            CHANNEL_CREATE  sent when a channel is created/joined on the client
+                            VOICE_CHANNEL_SELECT    sent when the client joins a voice channel
+                            VOICE_STATE_CREATE  sent when a user joins a subscribed voice channel
+                            VOICE_STATE_UPDATE  sent when a user's voice state changes in a subscribed voice channel (mute, volume, etc.)
+                            VOICE_STATE_DELETE  sent when a user parts a subscribed voice channel
+                            VOICE_SETTINGS_UPDATE   sent when the client's voice settings update
+                            VOICE_CONNECTION_STATUS sent when the client's voice connection status changes
+                            SPEAKING_START  sent when a user in a subscribed voice channel speaks
+                            SPEAKING_STOP   sent when a user in a subscribed voice channel stops speaking
+                            MESSAGE_CREATE  sent when a message is created in a subscribed text channel
+                            MESSAGE_UPDATE  sent when a message is updated in a subscribed text channel
+                            MESSAGE_DELETE  sent when a message is deleted in a subscribed text channel
+                            NOTIFICATION_CREATE sent when the client receives a notification (mention or new message in eligible channels)
+                            ACTIVITY_JOIN   sent when the user clicks a Rich Presence join invite in chat to join a game
+                            ACTIVITY_SPECTATE   sent when the user clicks a Rich Presence spectate invite in chat to spectate a game
+                            ACTIVITY_JOIN_REQUEST   sent when the user receives a Rich Presence Ask to Join request
+                            """
                             if msg.type == aiohttp.WSMsgType.TEXT:
                                 message = json.loads(msg.data)
                                 self.sequence = message.get('s')
@@ -163,11 +211,24 @@ class DiscordBot:
                                     asyncio.create_task(self.event_handler.handle_event(message))
                                     asyncio.create_task(self.command_handler.handle_command(message))
                                 elif message['t'] == 'INTERACTION_CREATE':
-                                    if 'autocomplete' in message['d']['data']:
-                                        asyncio.create_task(self.command_handler.handle_autocomplete(message['d']))
-                                    else:
-                                        asyncio.create_task(self.event_handler.handle_event(message))
-                                        asyncio.create_task(self.command_handler.handle_command(message))
+                                    valor = message.get('d', None)
+                                    if valor is not None:
+                                        if ('dropdown_select' or 'button_click' in message['d']['data']):
+                                            await self.event_handler.handle_event({
+                                            't': 'on_interaction_create',
+                                            'd': message['d']
+                                        })
+                                        elif ('dropdown_select' or 'button_click' in message['components']):
+                                            await self.event_handler.handle_event({
+                                            't': 'on_interaction_sendcccc',
+                                            'd': message['d']
+                                        })
+                                        if 'autocomplete' in message['d']['data']:
+                                            asyncio.create_task(self.command_handler.handle_autocomplete(message['d']))
+
+                                        else:
+                                            asyncio.create_task(self.event_handler.handle_event(message))
+                                            asyncio.create_task(self.command_handler.handle_command(message))
                                 elif message['t'] == 'ERROR':
                                     await self.event_handler.handle_event({
                                         't': 'on_error',

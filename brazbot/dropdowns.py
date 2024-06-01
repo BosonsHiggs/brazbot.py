@@ -37,3 +37,7 @@ class Dropdown:
             "max_values": self.max_values,
             "disabled": self.disabled
         }
+
+    @property
+    def to_component(self):
+        return {"type": 1, "components": [self.to_dict()]}
