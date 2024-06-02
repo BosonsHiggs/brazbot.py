@@ -1,8 +1,6 @@
 # brazbot.py
 brazbot.py is a Brazilian library for creating bots for Discord using the Python language
 
-Here is the README documentation for the `brazbot` library to be used on GitHub:
-
 ---
 
 # Brazbot
