@@ -5,6 +5,10 @@ from typing import Union, Literal, get_args, _GenericAlias
 from brazbot.greedy_union import Greedy
 from brazbot.attachments import Attachment
 from brazbot.snowflake import Snowflake
+from brazbot.member import Member
+from brazbot.roles import Role
+from brazbot.channels import Channel
+from brazbot.guilds import Guild
 
 logging.basicConfig(level=logging.DEBUG)
 #logging.getLogger().setLevel(logging.CRITICAL)
@@ -68,14 +72,18 @@ class CommandHandler:
 				option["type"] = 5  # BOOLEAN
 			elif param == Attachment:
 				option["type"] = 11  # ATTACHMENT
-			elif param == dict and "user" in param_name:
-				option["type"] = 6  # USER
+			elif isinstance(param, type) and issubclass(param, Member):
+				option["type"] = 6  # USER type (custom Member object)
 			elif param == dict and "channel" in param_name:
 				option["type"] = 7  # CHANNEL
-			elif param == dict and param_name == "guild":
-				option["type"] = 9  # GUILD
-			elif param == dict and "role" in param_name:
-				option["type"] = 8  # ROLE
+			elif isinstance(param, type) and issubclass(param, Guild):
+				option["type"] = 9  # GUILD type (custom Guild object)
+			elif isinstance(param, type) and issubclass(param, Role):
+				option["type"] = 8  # ROLE type (custom Role object)
+			elif isinstance(param, type) and issubclass(param, Channel):
+				option["type"] = 7  # CHANNEL type (custom Channel object)
+			elif isinstance(param, type) and issubclass(param, Thread):
+				option["type"] = 11  # THREAD type (custom Thread object)
 			elif isinstance(param, _GenericAlias) and param.__origin__ is Literal:
 				option["type"] = 3  # STRING
 				option["choices"] = [{"name": v, "value": v} for v in get_args(param)]
@@ -163,8 +171,22 @@ class CommandHandler:
 				ctx = CommandContext(self.bot, message['d'], interaction=message['d'])
 				self.bot.interaction = message['d']  # Set the interaction attribute
 				options = message['d']['data'].get('options', [])
+				args = {}
+				for opt in options:
+					if opt['type'] == 6:  # USER type
+						args[opt['name']] = await Member.from_user_id(self.bot, opt['value'], ctx.guild_id)
+					elif opt['type'] == 8:  # ROLE type
+						args[opt['name']] = await Role.from_role_id(self.bot, ctx.guild_id, opt['value'])
+					elif opt['type'] == 7:  # CHANNEL type
+						args[opt['name']] = await Channel.from_channel_id(self.bot, ctx.guild_id, opt['value'])
+					elif opt['type'] == 9:  # GUILD type 
+						args[opt['name']] = await Guild.from_guild_id(self.bot, ctx.guild_id)
+					elif opt['type'] == 11:  # THREAD type 
+						args[opt['name']] = await Thread.from_thread_id(cls, self.bot, ctx.guild_id, opt['value'])
+					else:
+						args[opt['name']] = opt['value']
 				logging.debug(f"Executing command: {command_name} with options: {options}")
-				await self.commands[command_name]["func"](ctx, **{opt['name']: opt['value'] for opt in options})
+				await self.commands[command_name]["func"](ctx, **args)
 		elif message['d']['type'] == 4:  # Autocomplete interaction
 			await self.handle_autocomplete(message['d'])
 

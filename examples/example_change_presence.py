@@ -3,6 +3,7 @@ import asyncio
 import logging
 from brazbot.bot import DiscordBot
 from brazbot.decorators import sync_slash_commands, rate_limit, describe
+from brazbot.member import Member
 
 # Define os intents necessários
 intents = ["GUILD_MESSAGES", "MESSAGE_CONTENT", "GUILD_PRESENCES"]
@@ -16,6 +17,7 @@ class MyBot(DiscordBot):
 		super().__init__(token, command_prefix, intents)
 
 	async def on_ready(self, data):
+		await bot.command_handler.sync_commands(guild_id=MY_GUILD)
 		print(f"Bot is ready! Application ID: {self.application_id}")
 		"""
 		Activity Types
@@ -32,17 +34,16 @@ class MyBot(DiscordBot):
 
 bot = MyBot(os.getenv("DISCORD_TOKEN"), command_prefix="!", intents=intents)
 
-@bot.command(name="hi", description="Says hello")
+@bot.command(name="hi", description="Says hi")
 @sync_slash_commands(guild_id=MY_GUILD)
-@rate_limit(limit=1, per=60, scope="user")
 @describe(user="Hello world!")
-async def hi_command(ctx, user: dict):
+async def hi_command(ctx, user: Member):
 	await ctx.defer()
-	await ctx.send_followup_message(content=f"Hello {user}.")
+	print(dir(user), user)
+	await ctx.send_followup_message(content=f'{user.username} and color {user.color}')
 
 async def main():
 	await bot.start()
-	await bot.command_handler.sync_commands(guild_id=MY_GUILD)
 
 if __name__ == "__main__":
 	asyncio.run(main())
