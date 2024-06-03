@@ -1,0 +1,241 @@
+
+<!DOCTYPE html>
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>brazbot.decorators &#8212; brazbot.py 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/classic.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css" />
+    
+    <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+    <script src="../../_static/jquery.js"></script>
+    <script src="../../_static/underscore.js"></script>
+    <script src="../../_static/doctools.js"></script>
+    
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">brazbot.py 0.1 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" accesskey="U">Module code</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">brazbot.decorators</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for brazbot.decorators</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">aiohttp</span>
+<span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">functools</span>
+<span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">wraps</span>
+<span class="kn">from</span> <span class="nn">brazbot.cache</span> <span class="kn">import</span> <span class="n">Cache</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span><span class="p">,</span> <span class="n">timedelta</span>
+
+
+<span class="n">cache</span> <span class="o">=</span> <span class="n">Cache</span><span class="p">()</span>
+
+<div class="viewcode-block" id="tasks"><a class="viewcode-back" href="../../brazbot.html#brazbot.decorators.tasks">[docs]</a><span class="k">def</span> <span class="nf">tasks</span><span class="p">(</span><span class="n">seconds</span><span class="o">=</span><span class="mi">120</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">decorator</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+        <span class="nd">@wraps</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">seconds</span><span class="p">)</span>
+                <span class="k">await</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">wrapper</span>
+    <span class="k">return</span> <span class="n">decorator</span></div>
+
+<div class="viewcode-block" id="sync_slash_commands"><a class="viewcode-back" href="../../brazbot.html#brazbot.decorators.sync_slash_commands">[docs]</a><span class="k">def</span> <span class="nf">sync_slash_commands</span><span class="p">(</span><span class="n">guild_id</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">decorator</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+        <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="k">await</span> <span class="n">func</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">await</span> <span class="n">ctx</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">command_handler</span><span class="o">.</span><span class="n">sync_commands</span><span class="p">(</span><span class="n">guild_id</span><span class="p">)</span>
+        <span class="n">wrapper</span><span class="o">.</span><span class="n">_slash_command</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">wrapper</span><span class="o">.</span><span class="n">_guild_id</span> <span class="o">=</span> <span class="n">guild_id</span>
+        <span class="k">return</span> <span class="n">wrapper</span>
+    <span class="k">return</span> <span class="n">decorator</span></div>
+
+<div class="viewcode-block" id="describe"><a class="viewcode-back" href="../../brazbot.html#brazbot.decorators.describe">[docs]</a><span class="k">def</span> <span class="nf">describe</span><span class="p">(</span><span class="o">**</span><span class="n">descriptions</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">decorator</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="s2">&quot;parameter_descriptions&quot;</span><span class="p">):</span>
+            <span class="n">func</span><span class="o">.</span><span class="n">parameter_descriptions</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">func</span><span class="o">.</span><span class="n">parameter_descriptions</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">descriptions</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">func</span>
+    <span class="k">return</span> <span class="n">decorator</span></div>
+
+
+<div class="viewcode-block" id="is_admin"><a class="viewcode-back" href="../../brazbot.html#brazbot.decorators.is_admin">[docs]</a><span class="k">def</span> <span class="nf">is_admin</span><span class="p">():</span>
+    <span class="k">def</span> <span class="nf">decorator</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+        <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="n">guild_id</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">guild_id</span>
+            <span class="n">author_id</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">author</span><span class="p">[</span><span class="s1">&#39;id&#39;</span><span class="p">]</span>
+            
+            <span class="n">guild_info</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;guild_info_</span><span class="si">{</span><span class="n">guild_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">guild_info</span><span class="p">:</span>
+                <span class="k">async</span> <span class="k">with</span> <span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+                    <span class="k">async</span> <span class="k">with</span> <span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;https://discord.com/api/v10/guilds/</span><span class="si">{</span><span class="n">guild_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">headers</span><span class="p">)</span> <span class="k">as</span> <span class="n">response</span><span class="p">:</span>
+                        <span class="n">guild_info</span> <span class="o">=</span> <span class="k">await</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+                <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;guild_info_</span><span class="si">{</span><span class="n">guild_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">guild_info</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">guild_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;owner_id&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="n">author_id</span><span class="p">:</span>
+                <span class="k">return</span> <span class="k">await</span> <span class="n">func</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            
+            <span class="n">roles</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">member</span><span class="p">[</span><span class="s1">&#39;roles&#39;</span><span class="p">]</span>
+            <span class="n">guild_roles</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;guild_roles_</span><span class="si">{</span><span class="n">guild_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">guild_roles</span><span class="p">:</span>
+                <span class="k">async</span> <span class="k">with</span> <span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+                    <span class="k">async</span> <span class="k">with</span> <span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;https://discord.com/api/v10/guilds/</span><span class="si">{</span><span class="n">guild_id</span><span class="si">}</span><span class="s2">/roles&quot;</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">headers</span><span class="p">)</span> <span class="k">as</span> <span class="n">response</span><span class="p">:</span>
+                        <span class="n">guild_roles</span> <span class="o">=</span> <span class="k">await</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+                <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;guild_roles_</span><span class="si">{</span><span class="n">guild_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">guild_roles</span><span class="p">)</span>
+            <span class="n">admin_role_ids</span> <span class="o">=</span> <span class="p">[</span><span class="n">role</span><span class="p">[</span><span class="s1">&#39;id&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">role</span> <span class="ow">in</span> <span class="n">guild_roles</span> <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">role</span><span class="p">[</span><span class="s1">&#39;permissions&#39;</span><span class="p">])</span> <span class="o">&amp;</span> <span class="mh">0x8</span><span class="p">]</span>
+            <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">role_id</span> <span class="ow">in</span> <span class="n">roles</span> <span class="k">for</span> <span class="n">role_id</span> <span class="ow">in</span> <span class="n">admin_role_ids</span><span class="p">):</span>
+                <span class="k">return</span> <span class="k">await</span> <span class="n">func</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">await</span> <span class="n">ctx</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">event_handler</span><span class="o">.</span><span class="n">handle_event</span><span class="p">({</span>
+                    <span class="s1">&#39;t&#39;</span><span class="p">:</span> <span class="s1">&#39;on_error&#39;</span><span class="p">,</span>
+                    <span class="s1">&#39;d&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;message&#39;</span><span class="p">:</span> <span class="s1">&#39;Você precisa ser um administrador ou o dono do servidor para usar este comando.&#39;</span><span class="p">,</span> <span class="s1">&#39;channel_id&#39;</span><span class="p">:</span> <span class="n">ctx</span><span class="o">.</span><span class="n">channel_id</span><span class="p">}</span>
+                <span class="p">})</span>
+        <span class="k">return</span> <span class="n">wrapper</span>
+    <span class="k">return</span> <span class="n">decorator</span></div>
+
+<div class="viewcode-block" id="is_owner"><a class="viewcode-back" href="../../brazbot.html#brazbot.decorators.is_owner">[docs]</a><span class="k">def</span> <span class="nf">is_owner</span><span class="p">():</span>
+    <span class="k">def</span> <span class="nf">decorator</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+        <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="n">guild_id</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">guild_id</span>
+            <span class="n">author_id</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">author</span><span class="p">[</span><span class="s1">&#39;id&#39;</span><span class="p">]</span>
+            
+            <span class="n">guild_info</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;guild_info_</span><span class="si">{</span><span class="n">guild_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">guild_info</span><span class="p">:</span>
+                <span class="k">async</span> <span class="k">with</span> <span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+                    <span class="k">async</span> <span class="k">with</span> <span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;https://discord.com/api/v10/guilds/</span><span class="si">{</span><span class="n">guild_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">headers</span><span class="p">)</span> <span class="k">as</span> <span class="n">response</span><span class="p">:</span>
+                        <span class="n">guild_info</span> <span class="o">=</span> <span class="k">await</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+                <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;guild_info_</span><span class="si">{</span><span class="n">guild_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">guild_info</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">guild_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;owner_id&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="n">author_id</span><span class="p">:</span>
+                <span class="k">return</span> <span class="k">await</span> <span class="n">func</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">await</span> <span class="n">ctx</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">event_handler</span><span class="o">.</span><span class="n">handle_event</span><span class="p">({</span>
+                <span class="s1">&#39;t&#39;</span><span class="p">:</span> <span class="s1">&#39;on_error&#39;</span><span class="p">,</span>
+                <span class="s1">&#39;d&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;message&#39;</span><span class="p">:</span> <span class="s1">&#39;Você precisa ser o dono do servidor para usar este comando.&#39;</span><span class="p">,</span> <span class="s1">&#39;channel_id&#39;</span><span class="p">:</span> <span class="n">ctx</span><span class="o">.</span><span class="n">channel_id</span><span class="p">}</span>
+            <span class="p">})</span>
+        <span class="k">return</span> <span class="n">wrapper</span>
+    <span class="k">return</span> <span class="n">decorator</span></div>
+
+<div class="viewcode-block" id="has_role"><a class="viewcode-back" href="../../brazbot.html#brazbot.decorators.has_role">[docs]</a><span class="k">def</span> <span class="nf">has_role</span><span class="p">(</span><span class="n">role_name</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">decorator</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+        <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="n">roles</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">member</span><span class="p">[</span><span class="s1">&#39;roles&#39;</span><span class="p">]</span>
+            <span class="n">guild_id</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">guild_id</span>
+            
+            <span class="n">guild_roles</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;guild_roles_</span><span class="si">{</span><span class="n">guild_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">guild_roles</span><span class="p">:</span>
+                <span class="k">async</span> <span class="k">with</span> <span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+                    <span class="k">async</span> <span class="k">with</span> <span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;https://discord.com/api/v10/guilds/</span><span class="si">{</span><span class="n">guild_id</span><span class="si">}</span><span class="s2">/roles&quot;</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">headers</span><span class="p">)</span> <span class="k">as</span> <span class="n">response</span><span class="p">:</span>
+                        <span class="n">guild_roles</span> <span class="o">=</span> <span class="k">await</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+                <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;guild_roles_</span><span class="si">{</span><span class="n">guild_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">guild_roles</span><span class="p">)</span>
+            <span class="n">role_ids</span> <span class="o">=</span> <span class="p">[</span><span class="n">role</span><span class="p">[</span><span class="s1">&#39;id&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">role</span> <span class="ow">in</span> <span class="n">guild_roles</span> <span class="k">if</span> <span class="n">role</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">role_name</span><span class="p">]</span>
+            <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">role_id</span> <span class="ow">in</span> <span class="n">roles</span> <span class="k">for</span> <span class="n">role_id</span> <span class="ow">in</span> <span class="n">role_ids</span><span class="p">):</span>
+                <span class="k">return</span> <span class="k">await</span> <span class="n">func</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">await</span> <span class="n">ctx</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">event_handler</span><span class="o">.</span><span class="n">handle_event</span><span class="p">({</span>
+                    <span class="s1">&#39;t&#39;</span><span class="p">:</span> <span class="s1">&#39;on_error&#39;</span><span class="p">,</span>
+                    <span class="s1">&#39;d&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;message&#39;</span><span class="p">:</span> <span class="sa">f</span><span class="s1">&#39;Você precisa do papel </span><span class="si">{</span><span class="n">role_name</span><span class="si">}</span><span class="s1"> para usar este comando.&#39;</span><span class="p">,</span> <span class="s1">&#39;channel_id&#39;</span><span class="p">:</span> <span class="n">ctx</span><span class="o">.</span><span class="n">channel_id</span><span class="p">}</span>
+                <span class="p">})</span>
+        <span class="k">return</span> <span class="n">wrapper</span>
+    <span class="k">return</span> <span class="n">decorator</span></div>
+    
+<div class="viewcode-block" id="rate_limit"><a class="viewcode-back" href="../../brazbot.html#brazbot.decorators.rate_limit">[docs]</a><span class="k">def</span> <span class="nf">rate_limit</span><span class="p">(</span><span class="n">limit</span><span class="p">,</span> <span class="n">per</span><span class="p">,</span> <span class="n">scope</span><span class="o">=</span><span class="s2">&quot;user&quot;</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">decorator</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+        <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;rate_limit:</span><span class="si">{</span><span class="n">scope</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">ctx</span><span class="o">.</span><span class="n">guild_id</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">scope</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="s1">&#39;guild&#39;</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">ctx</span><span class="o">.</span><span class="n">channel_id</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">scope</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="s1">&#39;channel&#39;</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">ctx</span><span class="o">.</span><span class="n">author</span><span class="p">[</span><span class="s1">&#39;id&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="n">current</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span>
+            <span class="k">if</span> <span class="n">current</span> <span class="o">&gt;=</span> <span class="n">limit</span><span class="p">:</span>
+                <span class="k">await</span> <span class="n">ctx</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">event_handler</span><span class="o">.</span><span class="n">handle_event</span><span class="p">({</span>
+                    <span class="s1">&#39;t&#39;</span><span class="p">:</span> <span class="s1">&#39;on_error&#39;</span><span class="p">,</span>
+                    <span class="s1">&#39;d&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;message&#39;</span><span class="p">:</span> <span class="s1">&#39;Você atingiu o limite de uso deste comando.&#39;</span><span class="p">,</span> <span class="s1">&#39;time_left&#39;</span><span class="p">:</span> <span class="n">per</span><span class="p">,</span> <span class="s1">&#39;channel_id&#39;</span><span class="p">:</span> <span class="n">ctx</span><span class="o">.</span><span class="n">channel_id</span><span class="p">}</span>
+                <span class="p">})</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">current</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">ttl</span><span class="o">=</span><span class="n">per</span><span class="p">)</span>
+                <span class="k">return</span> <span class="k">await</span> <span class="n">func</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">wrapper</span>
+    <span class="k">return</span> <span class="n">decorator</span></div>
+
+<div class="viewcode-block" id="command"><a class="viewcode-back" href="../../brazbot.html#brazbot.decorators.command">[docs]</a><span class="k">def</span> <span class="nf">command</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">decorator</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+        <span class="n">func</span><span class="o">.</span><span class="n">_command</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">name</span> <span class="ow">or</span> <span class="n">func</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+            <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="n">description</span> <span class="ow">or</span> <span class="n">func</span><span class="o">.</span><span class="vm">__doc__</span> <span class="ow">or</span> <span class="s2">&quot;No description provided&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;options&quot;</span><span class="p">:</span> <span class="p">[]</span>
+        <span class="p">}</span>
+        
+        <span class="k">for</span> <span class="n">param_name</span><span class="p">,</span> <span class="n">param_type</span> <span class="ow">in</span> <span class="n">func</span><span class="o">.</span><span class="vm">__annotations__</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">option</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">param_name</span><span class="p">,</span> <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Input text&quot;</span><span class="p">,</span> <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
+            <span class="k">if</span> <span class="n">param_type</span> <span class="o">==</span> <span class="nb">str</span><span class="p">:</span>
+                <span class="n">option</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">3</span>  <span class="c1"># STRING</span>
+            <span class="k">elif</span> <span class="n">param_type</span> <span class="o">==</span> <span class="nb">bytes</span><span class="p">:</span>
+                <span class="n">option</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">11</span>  <span class="c1"># ATTACHMENT</span>
+            <span class="k">elif</span> <span class="n">param_type</span> <span class="o">==</span> <span class="nb">list</span><span class="p">:</span>
+                <span class="n">option</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">3</span>
+                <span class="n">option</span><span class="p">[</span><span class="s2">&quot;description&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;Comma separated list of texts&quot;</span>
+            <span class="n">func</span><span class="o">.</span><span class="n">_command</span><span class="p">[</span><span class="s1">&#39;options&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">option</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">func</span>
+    <span class="k">return</span> <span class="n">decorator</span></div>
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">brazbot.py 0.1 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" >Module code</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">brazbot.decorators</a></li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2024, MIT.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 4.3.2.
+    </div>
+  </body>
+</html>

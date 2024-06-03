@@ -1,0 +1,7 @@
+brazbot
+=======
+
+.. toctree::
+   :maxdepth: 4
+
+   brazbot

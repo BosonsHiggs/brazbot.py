@@ -1,0 +1,408 @@
+
+<!DOCTYPE html>
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>brazbot.commands &#8212; brazbot.py 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/classic.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css" />
+    
+    <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+    <script src="../../_static/jquery.js"></script>
+    <script src="../../_static/underscore.js"></script>
+    <script src="../../_static/doctools.js"></script>
+    
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">brazbot.py 0.1 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" accesskey="U">Module code</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">brazbot.commands</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for brazbot.commands</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">aiohttp</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Union</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">get_args</span><span class="p">,</span> <span class="n">_GenericAlias</span>
+<span class="kn">from</span> <span class="nn">brazbot.greedy_union</span> <span class="kn">import</span> <span class="n">Greedy</span>
+<span class="kn">from</span> <span class="nn">brazbot.attachments</span> <span class="kn">import</span> <span class="n">Attachment</span>
+<span class="kn">from</span> <span class="nn">brazbot.snowflake</span> <span class="kn">import</span> <span class="n">Snowflake</span>
+<span class="kn">from</span> <span class="nn">brazbot.member</span> <span class="kn">import</span> <span class="n">Member</span>
+<span class="kn">from</span> <span class="nn">brazbot.roles</span> <span class="kn">import</span> <span class="n">Role</span>
+<span class="kn">from</span> <span class="nn">brazbot.channels</span> <span class="kn">import</span> <span class="n">Channel</span>
+<span class="kn">from</span> <span class="nn">brazbot.guilds</span> <span class="kn">import</span> <span class="n">Guild</span>
+<span class="kn">from</span> <span class="nn">brazbot.channels</span> <span class="kn">import</span> <span class="n">Channel</span>
+
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">)</span>
+<span class="c1">#logging.getLogger().setLevel(logging.CRITICAL)</span>
+
+<div class="viewcode-block" id="CommandContext"><a class="viewcode-back" href="../../brazbot.html#brazbot.commands.CommandContext">[docs]</a><span class="k">class</span> <span class="nc">CommandContext</span><span class="p">:</span>
+	<span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bot</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">interaction</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">bot</span> <span class="o">=</span> <span class="n">bot</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">message</span> <span class="o">=</span> <span class="n">message</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">interaction</span> <span class="o">=</span> <span class="n">interaction</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">channel_id</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;channel_id&#39;</span><span class="p">)</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">author</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;author&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">interaction</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;member&#39;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;user&#39;</span><span class="p">)</span> <span class="k">if</span> <span class="n">interaction</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">content</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;content&#39;</span><span class="p">)</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">guild_id</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;guild_id&#39;</span><span class="p">)</span> <span class="k">if</span> <span class="n">message</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;guild_id&#39;</span><span class="p">)</span> <span class="k">else</span> <span class="p">(</span><span class="n">interaction</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;guild_id&#39;</span><span class="p">)</span> <span class="k">if</span> <span class="n">interaction</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">options</span> <span class="o">=</span> <span class="p">{</span><span class="n">opt</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]:</span> <span class="n">opt</span><span class="p">[</span><span class="s1">&#39;value&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">opt</span> <span class="ow">in</span> <span class="p">(</span><span class="n">interaction</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;options&#39;</span><span class="p">,</span> <span class="p">[])</span> <span class="k">if</span> <span class="n">interaction</span> <span class="ow">and</span> <span class="s1">&#39;data&#39;</span> <span class="ow">in</span> <span class="n">interaction</span> <span class="k">else</span> <span class="p">[])}</span>
+
+<div class="viewcode-block" id="CommandContext.defer"><a class="viewcode-back" href="../../brazbot.html#brazbot.commands.CommandContext.defer">[docs]</a>	<span class="k">async</span> <span class="k">def</span> <span class="nf">defer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ephemeral</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+		<span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;https://discord.com/api/v10/interactions/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">interaction</span><span class="p">[</span><span class="s1">&#39;id&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">interaction</span><span class="p">[</span><span class="s1">&#39;token&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">/callback&quot;</span>
+		<span class="n">json_data</span> <span class="o">=</span> <span class="p">{</span>
+			<span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="mi">5</span>  <span class="c1"># Type 5 is for deferred responses</span>
+		<span class="p">}</span>
+		<span class="k">if</span> <span class="n">ephemeral</span><span class="p">:</span>
+			<span class="n">json_data</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;flags&quot;</span><span class="p">:</span> <span class="mi">64</span><span class="p">}</span>
+
+		<span class="k">async</span> <span class="k">with</span> <span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+			<span class="k">async</span> <span class="k">with</span> <span class="n">session</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">json_data</span><span class="p">)</span> <span class="k">as</span> <span class="n">response</span><span class="p">:</span>
+				<span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status</span> <span class="o">!=</span> <span class="mi">204</span><span class="p">:</span>
+					<span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to defer interaction: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+				<span class="k">else</span><span class="p">:</span>
+					<span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Interaction deferred successfully&quot;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CommandContext.send_modal"><a class="viewcode-back" href="../../brazbot.html#brazbot.commands.CommandContext.send_modal">[docs]</a>	<span class="k">async</span> <span class="k">def</span> <span class="nf">send_modal</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">title</span><span class="p">,</span> <span class="n">custom_id</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+		<span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">message_handler</span><span class="o">.</span><span class="n">send_modal</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">interaction</span><span class="p">,</span> <span class="n">title</span><span class="p">,</span> <span class="n">custom_id</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CommandContext.send_followup_message"><a class="viewcode-back" href="../../brazbot.html#brazbot.commands.CommandContext.send_followup_message">[docs]</a>	<span class="k">async</span> <span class="k">def</span> <span class="nf">send_followup_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">embed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">embeds</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">files</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">components</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ephemeral</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+		<span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">message_handler</span><span class="o">.</span><span class="n">send_followup_message</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">application_id</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">interaction</span><span class="p">[</span><span class="s2">&quot;token&quot;</span><span class="p">],</span> <span class="n">content</span><span class="p">,</span> <span class="n">embed</span><span class="p">,</span> <span class="n">embeds</span><span class="p">,</span> <span class="n">files</span><span class="p">,</span> <span class="n">components</span><span class="p">,</span> <span class="n">ephemeral</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CommandContext.get_channel"><a class="viewcode-back" href="../../brazbot.html#brazbot.commands.CommandContext.get_channel">[docs]</a>	<span class="k">async</span> <span class="k">def</span> <span class="nf">get_channel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">id</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+		<span class="n">_id</span> <span class="o">=</span> <span class="nb">id</span> <span class="k">if</span> <span class="nb">id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">channel_id</span>
+		<span class="k">return</span> <span class="k">await</span> <span class="n">Channel</span><span class="o">.</span><span class="n">from_channel_id</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">guild_id</span><span class="p">,</span> <span class="n">_id</span><span class="p">)</span></div></div>
+
+<div class="viewcode-block" id="CommandHandler"><a class="viewcode-back" href="../../brazbot.html#brazbot.commands.CommandHandler">[docs]</a><span class="k">class</span> <span class="nc">CommandHandler</span><span class="p">:</span>
+	<span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bot</span><span class="p">):</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">bot</span> <span class="o">=</span> <span class="n">bot</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">commands</span> <span class="o">=</span> <span class="p">{}</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">autocomplete_functions</span> <span class="o">=</span> <span class="p">{}</span>
+
+<div class="viewcode-block" id="CommandHandler.register_command"><a class="viewcode-back" href="../../brazbot.html#brazbot.commands.CommandHandler.register_command">[docs]</a>	<span class="k">def</span> <span class="nf">register_command</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+		<span class="n">name</span> <span class="o">=</span> <span class="n">name</span> <span class="ow">or</span> <span class="n">func</span><span class="o">.</span><span class="vm">__name__</span>
+		<span class="n">description</span> <span class="o">=</span> <span class="n">description</span> <span class="ow">or</span> <span class="n">func</span><span class="o">.</span><span class="vm">__doc__</span> <span class="ow">or</span> <span class="s2">&quot;No description provided&quot;</span>
+
+		<span class="n">options</span> <span class="o">=</span> <span class="p">[]</span>
+		<span class="k">for</span> <span class="n">param_name</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">func</span><span class="o">.</span><span class="vm">__annotations__</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+			<span class="n">option</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">param_name</span><span class="p">,</span> <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
+			<span class="k">if</span> <span class="n">param</span> <span class="o">==</span> <span class="nb">str</span><span class="p">:</span>
+				<span class="n">option</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">3</span>  <span class="c1"># STRING</span>
+				<span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="s2">&quot;autocomplete_options&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">param_name</span> <span class="ow">in</span> <span class="n">func</span><span class="o">.</span><span class="n">autocomplete_options</span><span class="p">:</span>
+					<span class="n">option</span><span class="p">[</span><span class="s2">&quot;autocomplete&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+			<span class="k">elif</span> <span class="n">param</span> <span class="o">==</span> <span class="nb">int</span><span class="p">:</span>
+				<span class="n">option</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">4</span>  <span class="c1"># INTEGER</span>
+			<span class="k">elif</span> <span class="n">param</span> <span class="o">==</span> <span class="nb">float</span><span class="p">:</span>
+				<span class="n">option</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">10</span>  <span class="c1"># NUMBER</span>
+			<span class="k">elif</span> <span class="n">param</span> <span class="o">==</span> <span class="nb">bytes</span><span class="p">:</span>  <span class="c1"># Handle file attachments</span>
+				<span class="n">option</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">11</span>  <span class="c1"># ATTACHMENT</span>
+			<span class="k">elif</span> <span class="n">param</span> <span class="o">==</span> <span class="nb">bool</span><span class="p">:</span>
+				<span class="n">option</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">5</span>  <span class="c1"># BOOLEAN</span>
+			<span class="k">elif</span> <span class="n">param</span> <span class="o">==</span> <span class="n">Attachment</span><span class="p">:</span>
+				<span class="n">option</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">11</span>  <span class="c1"># ATTACHMENT</span>
+			<span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">Member</span><span class="p">):</span>
+				<span class="n">option</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">6</span>  <span class="c1"># USER type (custom Member object)</span>
+			<span class="k">elif</span> <span class="n">param</span> <span class="o">==</span> <span class="nb">dict</span> <span class="ow">and</span> <span class="s2">&quot;channel&quot;</span> <span class="ow">in</span> <span class="n">param_name</span><span class="p">:</span>
+				<span class="n">option</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">7</span>  <span class="c1"># CHANNEL</span>
+			<span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">Guild</span><span class="p">):</span>
+				<span class="n">option</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">9</span>  <span class="c1"># GUILD type (custom Guild object)</span>
+			<span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">Role</span><span class="p">):</span>
+				<span class="n">option</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">8</span>  <span class="c1"># ROLE type (custom Role object)</span>
+			<span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">Channel</span><span class="p">):</span>
+				<span class="n">option</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">7</span>  <span class="c1"># CHANNEL type (custom Channel object)</span>
+			<span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">Thread</span><span class="p">):</span>
+				<span class="n">option</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">11</span>  <span class="c1"># THREAD type (custom Thread object)</span>
+			<span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">_GenericAlias</span><span class="p">)</span> <span class="ow">and</span> <span class="n">param</span><span class="o">.</span><span class="n">__origin__</span> <span class="ow">is</span> <span class="n">Literal</span><span class="p">:</span>
+				<span class="n">option</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">3</span>  <span class="c1"># STRING</span>
+				<span class="n">option</span><span class="p">[</span><span class="s2">&quot;choices&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">v</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="n">v</span><span class="p">}</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">get_args</span><span class="p">(</span><span class="n">param</span><span class="p">)]</span>
+			<span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">_GenericAlias</span><span class="p">)</span> <span class="ow">and</span> <span class="n">param</span><span class="o">.</span><span class="n">__origin__</span> <span class="ow">is</span> <span class="n">Union</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">__args__</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span> <span class="ow">and</span> <span class="n">param</span><span class="o">.</span><span class="n">__args__</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="ow">is</span> <span class="nb">type</span><span class="p">(</span><span class="kc">None</span><span class="p">):</span>
+				<span class="n">option</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">3</span>  <span class="c1"># STRING</span>
+				<span class="n">option</span><span class="p">[</span><span class="s2">&quot;required&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+			<span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">_GenericAlias</span><span class="p">)</span> <span class="ow">and</span> <span class="n">param</span><span class="o">.</span><span class="n">__origin__</span> <span class="ow">is</span> <span class="n">Greedy</span><span class="p">:</span>
+				<span class="n">option</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">3</span>  <span class="c1"># STRING</span>
+				<span class="n">option</span><span class="p">[</span><span class="s2">&quot;required&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+			<span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">_GenericAlias</span><span class="p">)</span> <span class="ow">and</span> <span class="n">param</span><span class="o">.</span><span class="n">__origin__</span> <span class="ow">is</span> <span class="n">Union</span><span class="p">:</span>
+				<span class="k">if</span> <span class="nb">str</span> <span class="ow">in</span> <span class="n">param</span><span class="o">.</span><span class="n">__args__</span><span class="p">:</span>
+					<span class="n">option</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">3</span>
+				<span class="k">if</span> <span class="nb">int</span> <span class="ow">in</span> <span class="n">param</span><span class="o">.</span><span class="n">__args__</span><span class="p">:</span>
+					<span class="n">option</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">4</span>
+				<span class="k">if</span> <span class="nb">float</span> <span class="ow">in</span> <span class="n">param</span><span class="o">.</span><span class="n">__args__</span><span class="p">:</span>
+					<span class="n">option</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">10</span>
+
+			<span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="s2">&quot;parameter_descriptions&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">param_name</span> <span class="ow">in</span> <span class="n">func</span><span class="o">.</span><span class="n">parameter_descriptions</span><span class="p">:</span>
+				<span class="n">option</span><span class="p">[</span><span class="s2">&quot;description&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="n">parameter_descriptions</span><span class="p">[</span><span class="n">param_name</span><span class="p">]</span>
+			<span class="k">else</span><span class="p">:</span>
+				<span class="n">option</span><span class="p">[</span><span class="s2">&quot;description&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">param_name</span>  <span class="c1"># Default to the parameter name if no description is provided</span>
+
+			<span class="n">options</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">option</span><span class="p">)</span>
+
+		<span class="bp">self</span><span class="o">.</span><span class="n">commands</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+			<span class="s2">&quot;func&quot;</span><span class="p">:</span> <span class="n">func</span><span class="p">,</span>
+			<span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="n">description</span><span class="p">,</span>
+			<span class="s2">&quot;options&quot;</span><span class="p">:</span> <span class="n">options</span><span class="p">,</span>
+			<span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="mi">1</span>  <span class="c1"># 1 indicates a CHAT_INPUT command</span>
+		<span class="p">}</span>
+
+		<span class="n">logging</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Registered command: </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> with options: </span><span class="si">{</span><span class="n">options</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+		<span class="c1">#logging.debug(f&quot;Registered command: {name} with options: {options}&quot;)</span>
+
+<div class="viewcode-block" id="CommandHandler.register_autocomplete"><a class="viewcode-back" href="../../brazbot.html#brazbot.commands.CommandHandler.register_autocomplete">[docs]</a>	<span class="k">def</span> <span class="nf">register_autocomplete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">command_name</span><span class="p">,</span> <span class="n">option_name</span><span class="p">):</span>
+		<span class="k">if</span> <span class="n">command_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">commands</span><span class="p">:</span>
+			<span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Command &#39;</span><span class="si">{</span><span class="n">command_name</span><span class="si">}</span><span class="s2">&#39; not found&quot;</span><span class="p">)</span>
+		<span class="k">for</span> <span class="n">option</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">commands</span><span class="p">[</span><span class="n">command_name</span><span class="p">][</span><span class="s2">&quot;options&quot;</span><span class="p">]:</span>
+			<span class="k">if</span> <span class="n">option</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">option_name</span><span class="p">:</span>
+				<span class="n">option</span><span class="p">[</span><span class="s2">&quot;autocomplete&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+				<span class="bp">self</span><span class="o">.</span><span class="n">autocomplete_functions</span><span class="p">[(</span><span class="n">command_name</span><span class="p">,</span> <span class="n">option_name</span><span class="p">)]</span> <span class="o">=</span> <span class="n">func</span>
+				<span class="k">return</span>
+		<span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Option &#39;</span><span class="si">{</span><span class="n">option_name</span><span class="si">}</span><span class="s2">&#39; not found in command &#39;</span><span class="si">{</span><span class="n">command_name</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CommandHandler.send_autocomplete_response"><a class="viewcode-back" href="../../brazbot.html#brazbot.commands.CommandHandler.send_autocomplete_response">[docs]</a>	<span class="k">async</span> <span class="k">def</span> <span class="nf">send_autocomplete_response</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">interaction</span><span class="p">,</span> <span class="n">suggestions</span><span class="p">):</span>
+		<span class="n">response_data</span> <span class="o">=</span> <span class="p">{</span>
+			<span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>  <span class="c1"># Autocomplete result type</span>
+			<span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{</span>
+				<span class="s2">&quot;choices&quot;</span><span class="p">:</span> <span class="n">suggestions</span>
+			<span class="p">}</span>
+		<span class="p">}</span>
+		<span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;https://discord.com/api/v10/interactions/</span><span class="si">{</span><span class="n">interaction</span><span class="p">[</span><span class="s1">&#39;id&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">interaction</span><span class="p">[</span><span class="s1">&#39;token&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">/callback&quot;</span>
+		<span class="k">async</span> <span class="k">with</span> <span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+			<span class="k">async</span> <span class="k">with</span> <span class="n">session</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">response_data</span><span class="p">)</span> <span class="k">as</span> <span class="n">response</span><span class="p">:</span>
+				<span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status</span> <span class="o">!=</span> <span class="mi">200</span><span class="p">:</span>
+					<span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to send autocomplete response: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="CommandHandler.handle_autocomplete"><a class="viewcode-back" href="../../brazbot.html#brazbot.commands.CommandHandler.handle_autocomplete">[docs]</a>	<span class="k">async</span> <span class="k">def</span> <span class="nf">handle_autocomplete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">interaction</span><span class="p">):</span>
+		<span class="n">command_name</span> <span class="o">=</span> <span class="n">interaction</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">][</span><span class="s1">&#39;name&#39;</span><span class="p">]</span>
+		<span class="n">options</span> <span class="o">=</span> <span class="n">interaction</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">][</span><span class="s1">&#39;options&#39;</span><span class="p">]</span>
+		<span class="n">focused_option</span> <span class="o">=</span> <span class="nb">next</span><span class="p">((</span><span class="n">opt</span> <span class="k">for</span> <span class="n">opt</span> <span class="ow">in</span> <span class="n">options</span> <span class="k">if</span> <span class="n">opt</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;focused&#39;</span><span class="p">)),</span> <span class="kc">None</span><span class="p">)</span>
+		<span class="k">if</span> <span class="n">focused_option</span><span class="p">:</span>
+			<span class="n">option_name</span> <span class="o">=</span> <span class="n">focused_option</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span>
+			<span class="k">if</span> <span class="p">(</span><span class="n">command_name</span><span class="p">,</span> <span class="n">option_name</span><span class="p">)</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">autocomplete_functions</span><span class="p">:</span>
+				<span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">autocomplete_functions</span><span class="p">[(</span><span class="n">command_name</span><span class="p">,</span> <span class="n">option_name</span><span class="p">)](</span><span class="n">interaction</span><span class="p">)</span>
+			<span class="k">else</span><span class="p">:</span>
+				<span class="n">logging</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No autocomplete function registered for command &#39;</span><span class="si">{</span><span class="n">command_name</span><span class="si">}</span><span class="s2">&#39; and option &#39;</span><span class="si">{</span><span class="n">option_name</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span></div>
+
+
+	<span class="c1">#logging.debug(f&quot;Handling command for message: {message}&quot;)</span>
+<div class="viewcode-block" id="CommandHandler.handle_command"><a class="viewcode-back" href="../../brazbot.html#brazbot.commands.CommandHandler.handle_command">[docs]</a>	<span class="k">async</span> <span class="k">def</span> <span class="nf">handle_command</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">):</span>
+		<span class="n">logging</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Handling command for message: </span><span class="si">{</span><span class="n">message</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+		<span class="k">if</span> <span class="s1">&#39;content&#39;</span> <span class="ow">in</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">]:</span>
+			<span class="n">content</span> <span class="o">=</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">][</span><span class="s1">&#39;content&#39;</span><span class="p">]</span>
+			<span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">command_prefix</span> <span class="ow">and</span> <span class="n">content</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">command_prefix</span><span class="p">):</span>
+				<span class="n">command_name</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">command_prefix</span><span class="p">):]</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+				<span class="k">if</span> <span class="n">command_name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">commands</span><span class="p">:</span>
+					<span class="n">ctx</span> <span class="o">=</span> <span class="n">CommandContext</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="p">,</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">])</span>
+					<span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">commands</span><span class="p">[</span><span class="n">command_name</span><span class="p">][</span><span class="s2">&quot;func&quot;</span><span class="p">](</span><span class="n">ctx</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span>
+		<span class="k">elif</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">][</span><span class="s1">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>  <span class="c1"># Slash command type</span>
+			<span class="n">command_name</span> <span class="o">=</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">][</span><span class="s1">&#39;data&#39;</span><span class="p">][</span><span class="s1">&#39;name&#39;</span><span class="p">]</span>
+			<span class="k">if</span> <span class="n">command_name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">commands</span><span class="p">:</span>
+				<span class="n">ctx</span> <span class="o">=</span> <span class="n">CommandContext</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="p">,</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">],</span> <span class="n">interaction</span><span class="o">=</span><span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">])</span>
+				<span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">interaction</span> <span class="o">=</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">]</span>  <span class="c1"># Set the interaction attribute</span>
+				<span class="n">options</span> <span class="o">=</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">][</span><span class="s1">&#39;data&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;options&#39;</span><span class="p">,</span> <span class="p">[])</span>
+				<span class="n">args</span> <span class="o">=</span> <span class="p">{}</span>
+				<span class="k">for</span> <span class="n">opt</span> <span class="ow">in</span> <span class="n">options</span><span class="p">:</span>
+					<span class="k">if</span> <span class="n">opt</span><span class="p">[</span><span class="s1">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">6</span><span class="p">:</span>  <span class="c1"># USER type</span>
+						<span class="n">args</span><span class="p">[</span><span class="n">opt</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">Member</span><span class="o">.</span><span class="n">from_user_id</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="p">,</span> <span class="n">opt</span><span class="p">[</span><span class="s1">&#39;value&#39;</span><span class="p">],</span> <span class="n">ctx</span><span class="o">.</span><span class="n">guild_id</span><span class="p">)</span>
+					<span class="k">elif</span> <span class="n">opt</span><span class="p">[</span><span class="s1">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">8</span><span class="p">:</span>  <span class="c1"># ROLE type</span>
+						<span class="n">args</span><span class="p">[</span><span class="n">opt</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">Role</span><span class="o">.</span><span class="n">from_role_id</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">guild_id</span><span class="p">,</span> <span class="n">opt</span><span class="p">[</span><span class="s1">&#39;value&#39;</span><span class="p">])</span>
+					<span class="k">elif</span> <span class="n">opt</span><span class="p">[</span><span class="s1">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">7</span><span class="p">:</span>  <span class="c1"># CHANNEL type</span>
+						<span class="n">args</span><span class="p">[</span><span class="n">opt</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">Channel</span><span class="o">.</span><span class="n">from_channel_id</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">guild_id</span><span class="p">,</span> <span class="n">opt</span><span class="p">[</span><span class="s1">&#39;value&#39;</span><span class="p">])</span>
+					<span class="k">elif</span> <span class="n">opt</span><span class="p">[</span><span class="s1">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">9</span><span class="p">:</span>  <span class="c1"># GUILD type </span>
+						<span class="n">args</span><span class="p">[</span><span class="n">opt</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">Guild</span><span class="o">.</span><span class="n">from_guild_id</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">guild_id</span><span class="p">)</span>
+					<span class="k">elif</span> <span class="n">opt</span><span class="p">[</span><span class="s1">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">11</span><span class="p">:</span>  <span class="c1"># THREAD type </span>
+						<span class="n">args</span><span class="p">[</span><span class="n">opt</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">Thread</span><span class="o">.</span><span class="n">from_thread_id</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">guild_id</span><span class="p">,</span> <span class="n">opt</span><span class="p">[</span><span class="s1">&#39;value&#39;</span><span class="p">])</span>
+					<span class="k">else</span><span class="p">:</span>
+						<span class="n">args</span><span class="p">[</span><span class="n">opt</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]]</span> <span class="o">=</span> <span class="n">opt</span><span class="p">[</span><span class="s1">&#39;value&#39;</span><span class="p">]</span>
+				<span class="n">logging</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Executing command: </span><span class="si">{</span><span class="n">command_name</span><span class="si">}</span><span class="s2"> with options: </span><span class="si">{</span><span class="n">options</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+				<span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">commands</span><span class="p">[</span><span class="n">command_name</span><span class="p">][</span><span class="s2">&quot;func&quot;</span><span class="p">](</span><span class="n">ctx</span><span class="p">,</span> <span class="o">**</span><span class="n">args</span><span class="p">)</span>
+		<span class="k">elif</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">][</span><span class="s1">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">4</span><span class="p">:</span>  <span class="c1"># Autocomplete interaction</span>
+			<span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">handle_autocomplete</span><span class="p">(</span><span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">])</span></div>
+
+<div class="viewcode-block" id="CommandHandler.get_existing_commands"><a class="viewcode-back" href="../../brazbot.html#brazbot.commands.CommandHandler.get_existing_commands">[docs]</a>	<span class="k">async</span> <span class="k">def</span> <span class="nf">get_existing_commands</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">guild_id</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+		<span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s2">/applications/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">application_id</span><span class="si">}</span><span class="s2">/commands&quot;</span>
+		<span class="k">if</span> <span class="n">guild_id</span><span class="p">:</span>
+			<span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s2">/applications/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">application_id</span><span class="si">}</span><span class="s2">/guilds/</span><span class="si">{</span><span class="n">guild_id</span><span class="si">}</span><span class="s2">/commands&quot;</span>
+
+		<span class="k">async</span> <span class="k">with</span> <span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+			<span class="k">async</span> <span class="k">with</span> <span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">headers</span><span class="p">)</span> <span class="k">as</span> <span class="n">response</span><span class="p">:</span>
+				<span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status</span> <span class="o">==</span> <span class="mi">200</span><span class="p">:</span>
+					<span class="k">return</span> <span class="p">{</span><span class="n">cmd</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]:</span> <span class="n">cmd</span> <span class="k">for</span> <span class="n">cmd</span> <span class="ow">in</span> <span class="k">await</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()}</span>
+				<span class="k">return</span> <span class="p">{}</span></div>
+
+<div class="viewcode-block" id="CommandHandler.sync_commands"><a class="viewcode-back" href="../../brazbot.html#brazbot.commands.CommandHandler.sync_commands">[docs]</a>	<span class="k">async</span> <span class="k">def</span> <span class="nf">sync_commands</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">guild_id</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+		<span class="k">try</span><span class="p">:</span>
+			<span class="k">if</span> <span class="ow">not</span> <span class="n">Snowflake</span><span class="o">.</span><span class="n">is_valid</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">application_id</span><span class="p">):</span>
+				<span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid application_id: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">application_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+			<span class="n">current_commands</span> <span class="o">=</span> <span class="p">[</span>
+				<span class="p">{</span>
+					<span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">name</span><span class="p">,</span>
+					<span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="n">cmd</span><span class="p">[</span><span class="s2">&quot;description&quot;</span><span class="p">],</span>
+					<span class="s2">&quot;options&quot;</span><span class="p">:</span> <span class="n">cmd</span><span class="p">[</span><span class="s2">&quot;options&quot;</span><span class="p">],</span>
+					<span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="mi">1</span>  <span class="c1"># 1 indica um comando CHAT_INPUT</span>
+				<span class="p">}</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">cmd</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">commands</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+			<span class="p">]</span>
+
+			<span class="n">existing_commands</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_existing_commands</span><span class="p">(</span><span class="n">guild_id</span><span class="p">)</span>
+			<span class="n">transformed_existing_commands</span> <span class="o">=</span> <span class="p">[</span>
+				<span class="p">{</span>
+					<span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">cmd</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">],</span>
+					<span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="n">cmd</span><span class="p">[</span><span class="s1">&#39;description&#39;</span><span class="p">],</span>
+					<span class="s2">&quot;options&quot;</span><span class="p">:</span> <span class="p">[</span>
+						<span class="p">{</span>
+							<span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">opt</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">],</span>
+							<span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="n">opt</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;description&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">),</span>
+							<span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="n">opt</span><span class="p">[</span><span class="s1">&#39;type&#39;</span><span class="p">],</span>
+							<span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="n">opt</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;required&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+						<span class="p">}</span> <span class="k">for</span> <span class="n">opt</span> <span class="ow">in</span> <span class="n">cmd</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;options&#39;</span><span class="p">,</span> <span class="p">[])</span>
+					<span class="p">],</span>
+					<span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="n">cmd</span><span class="p">[</span><span class="s1">&#39;type&#39;</span><span class="p">]</span>
+				<span class="p">}</span> <span class="k">for</span> <span class="n">cmd</span> <span class="ow">in</span> <span class="n">existing_commands</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+			<span class="p">]</span>
+
+			<span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">commands_changed</span><span class="p">(</span><span class="n">current_commands</span><span class="p">,</span> <span class="n">transformed_existing_commands</span><span class="p">):</span>
+				<span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s2">/applications/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">application_id</span><span class="si">}</span><span class="s2">/commands&quot;</span>
+				<span class="k">if</span> <span class="n">guild_id</span><span class="p">:</span>
+					<span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s2">/applications/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">application_id</span><span class="si">}</span><span class="s2">/guilds/</span><span class="si">{</span><span class="n">guild_id</span><span class="si">}</span><span class="s2">/commands&quot;</span>
+
+				<span class="k">async</span> <span class="k">with</span> <span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+					<span class="k">async</span> <span class="k">with</span> <span class="n">session</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">current_commands</span><span class="p">)</span> <span class="k">as</span> <span class="n">response</span><span class="p">:</span>
+						<span class="n">response_text</span> <span class="o">=</span> <span class="k">await</span> <span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">()</span>
+						<span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status</span> <span class="o">!=</span> <span class="mi">200</span><span class="p">:</span>
+							<span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to sync commands: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+							<span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Response: </span><span class="si">{</span><span class="n">response_text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+							<span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;Failed to sync commands: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status</span><span class="si">}</span><span class="se">\n</span><span class="s2">Response: </span><span class="si">{</span><span class="n">response_text</span><span class="si">}</span><span class="s2">&quot;</span>
+						<span class="k">else</span><span class="p">:</span>
+							<span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Commands synced successfully: &quot;</span> <span class="o">+</span> <span class="n">response_text</span><span class="p">)</span>
+							<span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;Commands synced successfully: </span><span class="si">{</span><span class="n">response_text</span><span class="si">}</span><span class="s2">&quot;</span>
+			<span class="k">else</span><span class="p">:</span>
+				<span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;No changes in commands. Sync skipped.&quot;</span><span class="p">)</span>
+				<span class="k">return</span> <span class="s2">&quot;No changes in commands. Sync skipped.&quot;</span>
+		<span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+			<span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Exception occurred while syncing commands: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+			<span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;Exception occurred while syncing commands: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span></div>
+
+<div class="viewcode-block" id="CommandHandler.send_response"><a class="viewcode-back" href="../../brazbot.html#brazbot.commands.CommandHandler.send_response">[docs]</a>	<span class="k">async</span> <span class="k">def</span> <span class="nf">send_response</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">content</span><span class="p">):</span>
+		<span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;https://discord.com/api/v10/interactions/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">interaction</span><span class="p">[</span><span class="s1">&#39;id&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">interaction</span><span class="p">[</span><span class="s1">&#39;token&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">/callback&quot;</span>
+		<span class="n">json_data</span> <span class="o">=</span> <span class="p">{</span>
+			<span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span>
+			<span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{</span>
+				<span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">content</span>
+			<span class="p">}</span>
+		<span class="p">}</span>
+	   <span class="c1">#logging.debug(f&quot;Sending response to interaction: {json_data}&quot;)</span>
+		<span class="k">async</span> <span class="k">with</span> <span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+			<span class="k">async</span> <span class="k">with</span> <span class="n">session</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">json_data</span><span class="p">)</span> <span class="k">as</span> <span class="n">response</span><span class="p">:</span>
+<span class="w">				</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">				if response.status != 200:</span>
+<span class="sd">				   #logging.error(f&quot;Failed to send response: {response.status}&quot;)</span>
+<span class="sd">				   #logging.error(f&quot;Response text: {await response.text()}&quot;)</span>
+<span class="sd">				else:</span>
+<span class="sd">				   #logging.info(&quot;Response sent successfully.&quot;)</span>
+<span class="sd">				&quot;&quot;&quot;</span>
+				<span class="k">return</span> <span class="k">await</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span></div>
+	
+<div class="viewcode-block" id="CommandHandler.commands_changed"><a class="viewcode-back" href="../../brazbot.html#brazbot.commands.CommandHandler.commands_changed">[docs]</a>	<span class="k">def</span> <span class="nf">commands_changed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">current_commands</span><span class="p">,</span> <span class="n">existing_commands</span><span class="p">):</span>
+		<span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">current_commands</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">existing_commands</span><span class="p">):</span>
+		   <span class="c1">#logging.debug(&quot;Number of commands changed.&quot;)</span>
+			<span class="k">return</span> <span class="kc">True</span>
+
+		<span class="k">for</span> <span class="n">current</span><span class="p">,</span> <span class="n">existing</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">current_commands</span><span class="p">,</span> <span class="n">existing_commands</span><span class="p">):</span>
+			<span class="k">if</span> <span class="n">current</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">existing</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]:</span>
+			   <span class="c1">#logging.debug(f&quot;Command name changed: {current[&#39;name&#39;]} != {existing[&#39;name&#39;]}&quot;)</span>
+				<span class="k">return</span> <span class="kc">True</span>
+			<span class="k">if</span> <span class="n">current</span><span class="p">[</span><span class="s2">&quot;description&quot;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">existing</span><span class="p">[</span><span class="s2">&quot;description&quot;</span><span class="p">]:</span>
+			   <span class="c1">#logging.debug(f&quot;Description for command {current[&#39;name&#39;]} changed: {current[&#39;description&#39;]} != {existing[&#39;description&#39;]}&quot;)</span>
+				<span class="k">return</span> <span class="kc">True</span>
+			<span class="k">if</span> <span class="n">current</span><span class="p">[</span><span class="s2">&quot;options&quot;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">existing</span><span class="p">[</span><span class="s2">&quot;options&quot;</span><span class="p">]:</span>
+			   <span class="c1">#logging.debug(f&quot;Options for command {current[&#39;name&#39;]} changed.&quot;)</span>
+				<span class="k">return</span> <span class="kc">True</span>
+
+		<span class="k">return</span> <span class="kc">False</span></div>
+
+   
+<div class="viewcode-block" id="CommandHandler.check_rate_limits"><a class="viewcode-back" href="../../brazbot.html#brazbot.commands.CommandHandler.check_rate_limits">[docs]</a>	<span class="k">async</span> <span class="k">def</span> <span class="nf">check_rate_limits</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+		<span class="n">endpoints</span> <span class="o">=</span> <span class="p">[</span>
+			<span class="s2">&quot;/gateway&quot;</span><span class="p">,</span>
+			<span class="s2">&quot;/channels/</span><span class="si">{self.channel_id}</span><span class="s2">/messages&quot;</span><span class="p">,</span>
+			<span class="s2">&quot;/guilds/</span><span class="si">{self.guild_id}</span><span class="s2">/members/</span><span class="si">{self.user_id}</span><span class="s2">&quot;</span>
+		<span class="p">]</span>
+		<span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+		<span class="k">async</span> <span class="k">with</span> <span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+			<span class="k">for</span> <span class="n">endpoint</span> <span class="ow">in</span> <span class="n">endpoints</span><span class="p">:</span>
+				<span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">base_url</span><span class="si">}{</span><span class="n">endpoint</span><span class="si">}</span><span class="s2">&quot;</span>
+				<span class="k">async</span> <span class="k">with</span> <span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">bot</span><span class="o">.</span><span class="n">headers</span><span class="p">)</span> <span class="k">as</span> <span class="n">response</span><span class="p">:</span>
+					<span class="n">rate_limit_info</span> <span class="o">=</span> <span class="p">{</span>
+						<span class="s2">&quot;endpoint&quot;</span><span class="p">:</span> <span class="n">endpoint</span><span class="p">,</span>
+						<span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="n">response</span><span class="o">.</span><span class="n">status</span><span class="p">,</span>
+						<span class="s2">&quot;limit&quot;</span><span class="p">:</span> <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;X-RateLimit-Limit&quot;</span><span class="p">),</span>
+						<span class="s2">&quot;remaining&quot;</span><span class="p">:</span> <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;X-RateLimit-Remaining&quot;</span><span class="p">),</span>
+						<span class="s2">&quot;reset&quot;</span><span class="p">:</span> <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;X-RateLimit-Reset&quot;</span><span class="p">),</span>
+						<span class="s2">&quot;reset_after&quot;</span><span class="p">:</span> <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;X-RateLimit-Reset-After&quot;</span><span class="p">),</span>
+						<span class="s2">&quot;bucket&quot;</span><span class="p">:</span> <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;X-RateLimit-Bucket&quot;</span><span class="p">),</span>
+						<span class="s2">&quot;retry_after&quot;</span><span class="p">:</span> <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;Retry-After&quot;</span><span class="p">),</span>
+						<span class="s2">&quot;global&quot;</span><span class="p">:</span> <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;X-RateLimit-Global&quot;</span><span class="p">),</span>
+					<span class="p">}</span>
+					<span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">rate_limit_info</span><span class="p">)</span>
+				   <span class="c1">#logging.info(f&quot;Rate limit info for {endpoint}: {rate_limit_info}&quot;)</span>
+		<span class="k">return</span> <span class="n">results</span></div></div>
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">brazbot.py 0.1 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" >Module code</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">brazbot.commands</a></li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2024, MIT.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 4.3.2.
+    </div>
+  </body>
+</html>

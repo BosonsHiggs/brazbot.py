@@ -1,0 +1,154 @@
+
+<!DOCTYPE html>
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>brazbot.utils &#8212; brazbot.py 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/classic.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css" />
+    
+    <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+    <script src="../../_static/jquery.js"></script>
+    <script src="../../_static/underscore.js"></script>
+    <script src="../../_static/doctools.js"></script>
+    
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">brazbot.py 0.1 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" accesskey="U">Module code</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">brazbot.utils</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for brazbot.utils</h1><div class="highlight"><pre>
+<span></span>
+<span class="kn">import</span> <span class="nn">uuid</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span><span class="p">,</span> <span class="n">timedelta</span>
+
+<div class="viewcode-block" id="create_embed"><a class="viewcode-back" href="../../brazbot.html#brazbot.utils.create_embed">[docs]</a><span class="k">def</span> <span class="nf">create_embed</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">description</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="mh">0x5865F2</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Cria um dicionário de embed para enviar mensagens embutidas no Discord.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        title (str): O título do embed.</span>
+<span class="sd">        description (str): A descrição do embed.</span>
+<span class="sd">        color (int, opcional): A cor do embed em formato hexadecimal. O padrão é 0x5865F2.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: O dicionário do embed.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;title&quot;</span><span class="p">:</span> <span class="n">title</span><span class="p">,</span>
+        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="n">description</span><span class="p">,</span>
+        <span class="s2">&quot;color&quot;</span><span class="p">:</span> <span class="n">color</span>
+    <span class="p">}</span></div>
+
+<div class="viewcode-block" id="format_command_response"><a class="viewcode-back" href="../../brazbot.html#brazbot.utils.format_command_response">[docs]</a><span class="k">def</span> <span class="nf">format_command_response</span><span class="p">(</span><span class="n">response_text</span><span class="p">,</span> <span class="n">is_error</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Formata uma resposta de comando com base em se é um erro ou não.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        response_text (str): O texto da resposta.</span>
+<span class="sd">        is_error (bool, opcional): Indica se a resposta é um erro. O padrão é False.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: O dicionário da resposta formatada.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">color</span> <span class="o">=</span> <span class="mh">0xFF0000</span> <span class="k">if</span> <span class="n">is_error</span> <span class="k">else</span> <span class="mh">0x00FF00</span>
+    <span class="k">return</span> <span class="n">create_embed</span><span class="p">(</span><span class="s2">&quot;Resposta do Comando&quot;</span><span class="p">,</span> <span class="n">response_text</span><span class="p">,</span> <span class="n">color</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="create_error_embed"><a class="viewcode-back" href="../../brazbot.html#brazbot.utils.create_error_embed">[docs]</a><span class="k">def</span> <span class="nf">create_error_embed</span><span class="p">(</span><span class="n">error_message</span><span class="p">):</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;title&quot;</span><span class="p">:</span> <span class="s2">&quot;Error&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="n">error_message</span><span class="p">,</span>
+        <span class="s2">&quot;color&quot;</span><span class="p">:</span> <span class="mh">0xFF0000</span>  <span class="c1"># Red color for errors</span>
+    <span class="p">}</span></div>
+
+<div class="viewcode-block" id="generate_unique_id"><a class="viewcode-back" href="../../brazbot.html#brazbot.utils.generate_unique_id">[docs]</a><span class="k">def</span> <span class="nf">generate_unique_id</span><span class="p">(</span><span class="n">max_length</span><span class="o">=</span><span class="mi">8</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Generates a unique integer ID of the specified length.</span>
+
+<span class="sd">     Args:</span>
+<span class="sd">     max_length (int, optional): The maximum length desired for the ID.</span>
+<span class="sd">     The default value is 8.</span>
+
+<span class="sd">     Returns:</span>
+<span class="sd">     int: A unique integer ID with the specified length.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Gerar um UUID</span>
+    <span class="n">unique_id</span> <span class="o">=</span> <span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span>
+    
+    <span class="c1"># Converter o UUID para uma string hexadecimal</span>
+    <span class="n">hex_string</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">unique_id</span><span class="o">.</span><span class="n">hex</span><span class="p">)</span>
+    
+    <span class="c1"># Reduzir o tamanho da string hexadecimal para o comprimento especificado</span>
+    <span class="n">shortened_hex</span> <span class="o">=</span> <span class="n">hex_string</span><span class="p">[:</span><span class="n">max_length</span><span class="p">]</span>
+    
+    <span class="c1"># Converter a string hexadecimal encurtada de volta para um inteiro</span>
+    <span class="n">shortened_int</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">shortened_hex</span><span class="p">,</span> <span class="mi">16</span><span class="p">)</span>
+    
+    <span class="k">return</span> <span class="n">shortened_int</span></div>
+
+<div class="viewcode-block" id="generate_list"><a class="viewcode-back" href="../../brazbot.html#brazbot.utils.generate_list">[docs]</a><span class="k">def</span> <span class="nf">generate_list</span><span class="p">(</span><span class="n">l</span><span class="p">:</span><span class="nb">list</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">l</span><span class="p">:</span>
+        <span class="k">yield</span> <span class="n">n</span></div>
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">brazbot.py 0.1 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" >Module code</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">brazbot.utils</a></li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2024, MIT.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 4.3.2.
+    </div>
+  </body>
+</html>

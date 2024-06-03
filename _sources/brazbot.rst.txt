@@ -1,0 +1,253 @@
+brazbot package
+===============
+
+Submodules
+----------
+
+brazbot.argument\_descriptions module
+-------------------------------------
+
+.. automodule:: brazbot.argument_descriptions
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.attachments module
+--------------------------
+
+.. automodule:: brazbot.attachments
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.audit\_log\_entry module
+--------------------------------
+
+.. automodule:: brazbot.audit_log_entry
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.autocomplete module
+---------------------------
+
+.. automodule:: brazbot.autocomplete
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.bot module
+------------------
+
+.. automodule:: brazbot.bot
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.bot\_itimized module
+----------------------------
+
+.. automodule:: brazbot.bot_itimized
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.buttons module
+----------------------
+
+.. automodule:: brazbot.buttons
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.cache module
+--------------------
+
+.. automodule:: brazbot.cache
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.channels module
+-----------------------
+
+.. automodule:: brazbot.channels
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.cogs module
+-------------------
+
+.. automodule:: brazbot.cogs
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.commands module
+-----------------------
+
+.. automodule:: brazbot.commands
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.decorators module
+-------------------------
+
+.. automodule:: brazbot.decorators
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.dropdowns module
+------------------------
+
+.. automodule:: brazbot.dropdowns
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.embed module
+--------------------
+
+.. automodule:: brazbot.embed
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.events module
+---------------------
+
+.. automodule:: brazbot.events
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.file module
+-------------------
+
+.. automodule:: brazbot.file
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.forms module
+--------------------
+
+.. automodule:: brazbot.forms
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.greedy\_union module
+----------------------------
+
+.. automodule:: brazbot.greedy_union
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.guilds module
+---------------------
+
+.. automodule:: brazbot.guilds
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.literal\_arguments module
+---------------------------------
+
+.. automodule:: brazbot.literal_arguments
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.member module
+---------------------
+
+.. automodule:: brazbot.member
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.message\_handler module
+-------------------------------
+
+.. automodule:: brazbot.message_handler
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.messages module
+-----------------------
+
+.. automodule:: brazbot.messages
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.optional\_arguments module
+----------------------------------
+
+.. automodule:: brazbot.optional_arguments
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.responses module
+------------------------
+
+.. automodule:: brazbot.responses
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.roles module
+--------------------
+
+.. automodule:: brazbot.roles
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.snowflake module
+------------------------
+
+.. automodule:: brazbot.snowflake
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.subgroups module
+------------------------
+
+.. automodule:: brazbot.subgroups
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.threads module
+----------------------
+
+.. automodule:: brazbot.threads
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+brazbot.utils module
+--------------------
+
+.. automodule:: brazbot.utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: brazbot
+   :members:
+   :undoc-members:
+   :show-inheritance:

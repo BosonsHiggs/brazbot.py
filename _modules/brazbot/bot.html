@@ -1,0 +1,384 @@
+
+<!DOCTYPE html>
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>brazbot.bot &#8212; brazbot.py 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/classic.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css" />
+    
+    <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+    <script src="../../_static/jquery.js"></script>
+    <script src="../../_static/underscore.js"></script>
+    <script src="../../_static/doctools.js"></script>
+    
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">brazbot.py 0.1 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" accesskey="U">Module code</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">brazbot.bot</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for brazbot.bot</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">aiohttp</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">aiohttp</span> <span class="kn">import</span> <span class="n">ClientResponseError</span>
+<span class="kn">from</span> <span class="nn">brazbot.events</span> <span class="kn">import</span> <span class="n">EventHandler</span>
+<span class="kn">from</span> <span class="nn">brazbot.commands</span> <span class="kn">import</span> <span class="n">CommandHandler</span>
+<span class="kn">from</span> <span class="nn">brazbot.message_handler</span> <span class="kn">import</span> <span class="n">MessageHandler</span>
+<span class="kn">from</span> <span class="nn">brazbot.cache</span> <span class="kn">import</span> <span class="n">Cache</span>
+<span class="kn">from</span> <span class="nn">brazbot.audit_log_entry</span> <span class="kn">import</span> <span class="n">AuditLogEntry</span>
+<span class="kn">from</span> <span class="nn">brazbot.eventstype</span> <span class="kn">import</span> <span class="n">EventTypes</span>
+<span class="kn">from</span> <span class="nn">brazbot.decorators</span> <span class="kn">import</span> <span class="n">tasks</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span><span class="p">,</span> <span class="n">timedelta</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">SEE: </span>
+<span class="sd">	1. https://discord.com/developers/docs/topics/rate-limits#global-rate-limit</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c1"># Mapeamento de intents</span>
+<span class="n">INTENTS</span> <span class="o">=</span> <span class="p">{</span>
+	<span class="s2">&quot;GUILDS&quot;</span><span class="p">:</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">0</span><span class="p">,</span>
+	<span class="s2">&quot;GUILD_MEMBERS&quot;</span><span class="p">:</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">1</span><span class="p">,</span>
+	<span class="s2">&quot;GUILD_BANS&quot;</span><span class="p">:</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">2</span><span class="p">,</span>
+	<span class="s2">&quot;GUILD_EMOJIS_AND_STICKERS&quot;</span><span class="p">:</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">3</span><span class="p">,</span>
+	<span class="s2">&quot;GUILD_INTEGRATIONS&quot;</span><span class="p">:</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">4</span><span class="p">,</span>
+	<span class="s2">&quot;GUILD_WEBHOOKS&quot;</span><span class="p">:</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">5</span><span class="p">,</span>
+	<span class="s2">&quot;GUILD_INVITES&quot;</span><span class="p">:</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">6</span><span class="p">,</span>
+	<span class="s2">&quot;GUILD_VOICE_STATES&quot;</span><span class="p">:</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">7</span><span class="p">,</span>
+	<span class="s2">&quot;GUILD_PRESENCES&quot;</span><span class="p">:</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">8</span><span class="p">,</span>
+	<span class="s2">&quot;GUILD_MESSAGES&quot;</span><span class="p">:</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">9</span><span class="p">,</span>
+	<span class="s2">&quot;GUILD_MESSAGE_REACTIONS&quot;</span><span class="p">:</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">10</span><span class="p">,</span>
+	<span class="s2">&quot;GUILD_MESSAGE_TYPING&quot;</span><span class="p">:</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">11</span><span class="p">,</span>
+	<span class="s2">&quot;DIRECT_MESSAGES&quot;</span><span class="p">:</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">12</span><span class="p">,</span>
+	<span class="s2">&quot;DIRECT_MESSAGE_REACTIONS&quot;</span><span class="p">:</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">13</span><span class="p">,</span>
+	<span class="s2">&quot;DIRECT_MESSAGE_TYPING&quot;</span><span class="p">:</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">14</span><span class="p">,</span>
+	<span class="s2">&quot;MESSAGE_CONTENT&quot;</span><span class="p">:</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">15</span><span class="p">,</span>
+	<span class="s2">&quot;GUILD_SCHEDULED_EVENTS&quot;</span><span class="p">:</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">16</span>
+<span class="p">}</span>
+
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">)</span>
+<span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">()</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">CRITICAL</span><span class="p">)</span>
+
+<span class="c1">#OP codes: https://discord.com/developers/docs/topics/opcodes-and-status-codes</span>
+<div class="viewcode-block" id="DiscordBot"><a class="viewcode-back" href="../../brazbot.html#brazbot.bot.DiscordBot">[docs]</a><span class="k">class</span> <span class="nc">DiscordBot</span><span class="p">:</span>
+	<span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">token</span><span class="p">,</span> <span class="n">command_prefix</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">intents</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">num_shards</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">shard_id</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">token</span> <span class="o">=</span> <span class="n">token</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">command_prefix</span> <span class="o">=</span> <span class="n">command_prefix</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">intents</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">calculate_intents</span><span class="p">(</span><span class="n">intents</span><span class="p">)</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">num_shards</span> <span class="o">=</span> <span class="n">num_shards</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">shard_id</span> <span class="o">=</span> <span class="n">shard_id</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">base_url</span> <span class="o">=</span> <span class="s2">&quot;https://discord.com/api/v10&quot;</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">headers</span> <span class="o">=</span> <span class="p">{</span>
+			<span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Bot </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">token</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+			<span class="s2">&quot;Content-Type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/json&quot;</span>
+		<span class="p">}</span>
+
+		<span class="bp">self</span><span class="o">.</span><span class="n">event_handler</span> <span class="o">=</span> <span class="n">EventHandler</span><span class="p">()</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">command_handler</span> <span class="o">=</span> <span class="n">CommandHandler</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">message_handler</span> <span class="o">=</span> <span class="n">MessageHandler</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">token</span><span class="p">)</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="o">=</span> <span class="n">Cache</span><span class="p">()</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">application_id</span> <span class="o">=</span> <span class="kc">None</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">heartbeat_interval</span> <span class="o">=</span> <span class="kc">None</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">heartbeat_task</span> <span class="o">=</span> <span class="kc">None</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">session_id</span> <span class="o">=</span> <span class="kc">None</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">sequence</span> <span class="o">=</span> <span class="kc">None</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">cogs</span> <span class="o">=</span> <span class="p">[]</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">eventtypes</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">event_type</span><span class="p">:</span> <span class="n">event_type</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">EventTypes</span><span class="p">))</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="o">=</span> <span class="p">{}</span>
+		<span class="c1"># Register events automatically</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">auto_register_events</span><span class="p">()</span>
+
+	<span class="c1"># Função para obter dados do cache</span>
+<div class="viewcode-block" id="DiscordBot.get_cache_data"><a class="viewcode-back" href="../../brazbot.html#brazbot.bot.DiscordBot.get_cache_data">[docs]</a>	<span class="k">def</span> <span class="nf">get_cache_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+		<span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
+			<span class="n">entry</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+			<span class="k">if</span> <span class="n">entry</span><span class="p">[</span><span class="s1">&#39;expiry&#39;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">():</span>
+				<span class="k">return</span> <span class="n">entry</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">]</span>
+			<span class="k">else</span><span class="p">:</span>
+				<span class="bp">self</span><span class="o">.</span><span class="n">delete_cache_data</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+		<span class="k">return</span> <span class="kc">None</span></div>
+
+	<span class="c1"># Função para definir dados no cache</span>
+<div class="viewcode-block" id="DiscordBot.set_cache_data"><a class="viewcode-back" href="../../brazbot.html#brazbot.bot.DiscordBot.set_cache_data">[docs]</a>	<span class="k">def</span> <span class="nf">set_cache_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">seconds</span><span class="o">=</span><span class="mi">60</span><span class="p">):</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+			<span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="n">data</span><span class="p">,</span>
+			<span class="s1">&#39;expiry&#39;</span><span class="p">:</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span> <span class="o">+</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">seconds</span><span class="o">=</span><span class="n">seconds</span><span class="p">)</span>
+		<span class="p">}</span></div>
+
+	<span class="c1"># Função para deletar dados do cache</span>
+<div class="viewcode-block" id="DiscordBot.delete_cache_data"><a class="viewcode-back" href="../../brazbot.html#brazbot.bot.DiscordBot.delete_cache_data">[docs]</a>	<span class="k">def</span> <span class="nf">delete_cache_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+		<span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
+			<span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">[</span><span class="n">key</span><span class="p">]</span></div>
+
+	<span class="c1"># Função para atualizar dados no cache (sem alterar a validade)</span>
+<div class="viewcode-block" id="DiscordBot.update_cache_data"><a class="viewcode-back" href="../../brazbot.html#brazbot.bot.DiscordBot.update_cache_data">[docs]</a>	<span class="k">def</span> <span class="nf">update_cache_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+		<span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
+			<span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="s1">&#39;data&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span></div>
+
+	<span class="nd">@tasks</span><span class="p">(</span><span class="n">seconds</span><span class="o">=</span><span class="mi">120</span><span class="p">)</span>
+	<span class="k">async</span> <span class="k">def</span> <span class="nf">_cache_cleanup_task</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+		<span class="n">now</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
+		<span class="n">keys_to_delete</span> <span class="o">=</span> <span class="p">[</span><span class="n">key</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">entry</span><span class="p">[</span><span class="s1">&#39;expiry&#39;</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">now</span><span class="p">]</span>
+		<span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys_to_delete</span><span class="p">:</span>
+			<span class="bp">self</span><span class="o">.</span><span class="n">delete_cache_data</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+		<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Deleted </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">keys_to_delete</span><span class="p">)</span><span class="si">}</span><span class="s2"> expired cache keys.&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="DiscordBot.calculate_intents"><a class="viewcode-back" href="../../brazbot.html#brazbot.bot.DiscordBot.calculate_intents">[docs]</a>	<span class="k">def</span> <span class="nf">calculate_intents</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">intents</span><span class="p">):</span>
+		<span class="k">if</span> <span class="n">intents</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+			<span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">INTENTS</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+		<span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">intents</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+			<span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">INTENTS</span><span class="p">[</span><span class="n">intent</span><span class="p">]</span> <span class="k">for</span> <span class="n">intent</span> <span class="ow">in</span> <span class="n">intents</span><span class="p">)</span>
+		<span class="k">return</span> <span class="n">intents</span></div>
+
+<div class="viewcode-block" id="DiscordBot.event"><a class="viewcode-back" href="../../brazbot.html#brazbot.bot.DiscordBot.event">[docs]</a>	<span class="k">def</span> <span class="nf">event</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">):</span>
+		<span class="n">event_name</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="vm">__name__</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">event_handler</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">event_name</span><span class="p">,</span> <span class="n">func</span><span class="p">)</span>
+		<span class="k">return</span> <span class="n">func</span></div>
+
+<div class="viewcode-block" id="DiscordBot.command"><a class="viewcode-back" href="../../brazbot.html#brazbot.bot.DiscordBot.command">[docs]</a>	<span class="k">def</span> <span class="nf">command</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+		<span class="k">def</span> <span class="nf">decorator</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+			<span class="bp">self</span><span class="o">.</span><span class="n">command_handler</span><span class="o">.</span><span class="n">register_command</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">description</span><span class="p">)</span>
+			<span class="k">return</span> <span class="n">func</span>
+		<span class="k">return</span> <span class="n">decorator</span></div>
+
+<div class="viewcode-block" id="DiscordBot.auto_register_events"><a class="viewcode-back" href="../../brazbot.html#brazbot.bot.DiscordBot.auto_register_events">[docs]</a>	<span class="k">def</span> <span class="nf">auto_register_events</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+		<span class="k">for</span> <span class="n">attr_name</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+			<span class="k">if</span> <span class="n">attr_name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;on_&quot;</span><span class="p">):</span>
+				<span class="n">attr</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr_name</span><span class="p">)</span>
+				<span class="k">if</span> <span class="n">callable</span><span class="p">(</span><span class="n">attr</span><span class="p">):</span>
+					<span class="bp">self</span><span class="o">.</span><span class="n">event</span><span class="p">(</span><span class="n">attr</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="DiscordBot.add_cog"><a class="viewcode-back" href="../../brazbot.html#brazbot.bot.DiscordBot.add_cog">[docs]</a>	<span class="k">def</span> <span class="nf">add_cog</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cog</span><span class="p">):</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">cogs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cog</span><span class="p">)</span>
+		<span class="k">for</span> <span class="n">attr_name</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">cog</span><span class="p">):</span>
+			<span class="n">attr</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cog</span><span class="p">,</span> <span class="n">attr_name</span><span class="p">)</span>
+			<span class="k">if</span> <span class="n">callable</span><span class="p">(</span><span class="n">attr</span><span class="p">):</span>
+				<span class="k">if</span> <span class="n">attr_name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;on_&quot;</span><span class="p">):</span>
+					<span class="bp">self</span><span class="o">.</span><span class="n">event</span><span class="p">(</span><span class="n">attr</span><span class="p">)</span>
+				<span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">attr</span><span class="p">,</span> <span class="s2">&quot;_command&quot;</span><span class="p">):</span>
+					<span class="bp">self</span><span class="o">.</span><span class="n">command</span><span class="p">(</span><span class="n">attr</span><span class="o">.</span><span class="n">_command</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span> <span class="n">attr</span><span class="o">.</span><span class="n">_command</span><span class="p">[</span><span class="s2">&quot;description&quot;</span><span class="p">])(</span><span class="n">attr</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="DiscordBot.setup_hook"><a class="viewcode-back" href="../../brazbot.html#brazbot.bot.DiscordBot.setup_hook">[docs]</a>	<span class="k">async</span> <span class="k">def</span> <span class="nf">setup_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+		<span class="k">pass</span></div>
+
+<div class="viewcode-block" id="DiscordBot.send_heartbeat"><a class="viewcode-back" href="../../brazbot.html#brazbot.bot.DiscordBot.send_heartbeat">[docs]</a>	<span class="k">async</span> <span class="k">def</span> <span class="nf">send_heartbeat</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ws</span><span class="p">):</span>
+		<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+			<span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">heartbeat_interval</span> <span class="o">/</span> <span class="mi">1000</span><span class="p">)</span>
+			<span class="k">await</span> <span class="n">ws</span><span class="o">.</span><span class="n">send_json</span><span class="p">({</span><span class="s2">&quot;op&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;d&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">sequence</span><span class="p">})</span></div>
+
+<div class="viewcode-block" id="DiscordBot.handle_rate_limit"><a class="viewcode-back" href="../../brazbot.html#brazbot.bot.DiscordBot.handle_rate_limit">[docs]</a>	<span class="k">async</span> <span class="k">def</span> <span class="nf">handle_rate_limit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">):</span>
+		<span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status</span> <span class="o">==</span> <span class="mi">429</span><span class="p">:</span>
+			<span class="n">retry_after</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;Retry-After&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+			<span class="n">is_global</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;X-RateLimit-Global&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+			<span class="n">rate_limit_scope</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;X-RateLimit-Scope&quot;</span><span class="p">,</span> <span class="s2">&quot;unknown&quot;</span><span class="p">)</span>
+			
+			<span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Rate limited. Retry after </span><span class="si">{</span><span class="n">retry_after</span><span class="si">}</span><span class="s2"> seconds. Scope: </span><span class="si">{</span><span class="n">rate_limit_scope</span><span class="si">}</span><span class="s2">. Global: </span><span class="si">{</span><span class="n">is_global</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+			<span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">retry_after</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="DiscordBot.change_presence"><a class="viewcode-back" href="../../brazbot.html#brazbot.bot.DiscordBot.change_presence">[docs]</a>	<span class="k">async</span> <span class="k">def</span> <span class="nf">change_presence</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">activity_name</span><span class="p">,</span> <span class="n">activity_type</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+		<span class="n">presence_payload</span> <span class="o">=</span> <span class="p">{</span>
+			<span class="s2">&quot;op&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>
+			<span class="s2">&quot;d&quot;</span><span class="p">:</span> <span class="p">{</span>
+				<span class="s2">&quot;since&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+				<span class="s2">&quot;activities&quot;</span><span class="p">:</span> <span class="p">[</span>
+					<span class="p">{</span>
+						<span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">activity_name</span><span class="p">,</span>
+						<span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="n">activity_type</span>
+					<span class="p">}</span>
+				<span class="p">],</span>
+				<span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;online&quot;</span><span class="p">,</span>
+				<span class="s2">&quot;afk&quot;</span><span class="p">:</span> <span class="kc">False</span>
+			<span class="p">}</span>
+		<span class="p">}</span>
+		<span class="k">async</span> <span class="k">with</span> <span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+			<span class="k">async</span> <span class="k">with</span> <span class="n">session</span><span class="o">.</span><span class="n">ws_connect</span><span class="p">(</span><span class="s2">&quot;wss://gateway.discord.gg/?v=10&amp;encoding=json&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">ws</span><span class="p">:</span>
+				<span class="k">await</span> <span class="n">ws</span><span class="o">.</span><span class="n">send_json</span><span class="p">(</span><span class="n">presence_payload</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="DiscordBot.start"><a class="viewcode-back" href="../../brazbot.html#brazbot.bot.DiscordBot.start">[docs]</a>	<span class="k">async</span> <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+		<span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_cache_cleanup_task</span><span class="p">())</span> <span class="c1"># Start cache scan every 120 seconds</span>
+		<span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">setup_hook</span><span class="p">()</span> <span class="c1"># Event method that starts only once</span>
+
+		<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+			<span class="k">try</span><span class="p">:</span>
+				<span class="k">async</span> <span class="k">with</span> <span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientSession</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+					<span class="k">async</span> <span class="k">with</span> <span class="n">session</span><span class="o">.</span><span class="n">ws_connect</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;wss://gateway.discord.gg/?v=10&amp;encoding=json&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">ws</span><span class="p">:</span>
+						<span class="n">identify_payload</span> <span class="o">=</span> <span class="p">{</span>
+							<span class="s2">&quot;op&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+							<span class="s2">&quot;d&quot;</span><span class="p">:</span> <span class="p">{</span>
+								<span class="s2">&quot;token&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">token</span><span class="p">,</span>
+								<span class="s2">&quot;intents&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">intents</span><span class="p">,</span>
+								<span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+									<span class="s2">&quot;$os&quot;</span><span class="p">:</span> <span class="s2">&quot;linux&quot;</span><span class="p">,</span>
+									<span class="s2">&quot;$browser&quot;</span><span class="p">:</span> <span class="s2">&quot;my_library&quot;</span><span class="p">,</span>
+									<span class="s2">&quot;$device&quot;</span><span class="p">:</span> <span class="s2">&quot;my_library&quot;</span>
+								<span class="p">},</span>
+								<span class="s2">&quot;shard&quot;</span><span class="p">:</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">shard_id</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_shards</span><span class="p">]</span>
+							<span class="p">}</span>
+						<span class="p">}</span>
+
+						<span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">session_id</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">sequence</span><span class="p">:</span>
+							<span class="k">await</span> <span class="n">ws</span><span class="o">.</span><span class="n">send_json</span><span class="p">({</span>
+								<span class="s2">&quot;op&quot;</span><span class="p">:</span> <span class="mi">6</span><span class="p">,</span>
+								<span class="s2">&quot;d&quot;</span><span class="p">:</span> <span class="p">{</span>
+									<span class="s2">&quot;token&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">token</span><span class="p">,</span>
+									<span class="s2">&quot;session_id&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">session_id</span><span class="p">,</span>
+									<span class="s2">&quot;seq&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">sequence</span>
+								<span class="p">}</span>
+							<span class="p">})</span>
+						<span class="k">else</span><span class="p">:</span>
+							<span class="k">await</span> <span class="n">ws</span><span class="o">.</span><span class="n">send_json</span><span class="p">(</span><span class="n">identify_payload</span><span class="p">)</span>
+
+						<span class="k">async</span> <span class="k">for</span> <span class="n">msg</span> <span class="ow">in</span> <span class="n">ws</span><span class="p">:</span>
+<span class="w">							</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">							NAME    DESCRIPTION</span>
+<span class="sd">							READY   non-subscription event sent immediately after connecting, contains server information</span>
+<span class="sd">							ERROR   non-subscription event sent when there is an error, including command responses</span>
+<span class="sd">							GUILD_STATUS    sent when a subscribed server&#39;s state changes</span>
+<span class="sd">							GUILD_CREATE    sent when a guild is created/joined on the client</span>
+<span class="sd">							CHANNEL_CREATE  sent when a channel is created/joined on the client</span>
+<span class="sd">							VOICE_CHANNEL_SELECT    sent when the client joins a voice channel</span>
+<span class="sd">							VOICE_STATE_CREATE  sent when a user joins a subscribed voice channel</span>
+<span class="sd">							VOICE_STATE_UPDATE  sent when a user&#39;s voice state changes in a subscribed voice channel (mute, volume, etc.)</span>
+<span class="sd">							VOICE_STATE_DELETE  sent when a user parts a subscribed voice channel</span>
+<span class="sd">							VOICE_SETTINGS_UPDATE   sent when the client&#39;s voice settings update</span>
+<span class="sd">							VOICE_CONNECTION_STATUS sent when the client&#39;s voice connection status changes</span>
+<span class="sd">							SPEAKING_START  sent when a user in a subscribed voice channel speaks</span>
+<span class="sd">							SPEAKING_STOP   sent when a user in a subscribed voice channel stops speaking</span>
+<span class="sd">							MESSAGE_CREATE  sent when a message is created in a subscribed text channel</span>
+<span class="sd">							MESSAGE_UPDATE  sent when a message is updated in a subscribed text channel</span>
+<span class="sd">							MESSAGE_DELETE  sent when a message is deleted in a subscribed text channel</span>
+<span class="sd">							NOTIFICATION_CREATE sent when the client receives a notification (mention or new message in eligible channels)</span>
+<span class="sd">							ACTIVITY_JOIN   sent when the user clicks a Rich Presence join invite in chat to join a game</span>
+<span class="sd">							ACTIVITY_SPECTATE   sent when the user clicks a Rich Presence spectate invite in chat to spectate a game</span>
+<span class="sd">							ACTIVITY_JOIN_REQUEST   sent when the user receives a Rich Presence Ask to Join request</span>
+<span class="sd">							&quot;&quot;&quot;</span>
+							<span class="k">if</span> <span class="n">msg</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">aiohttp</span><span class="o">.</span><span class="n">WSMsgType</span><span class="o">.</span><span class="n">TEXT</span><span class="p">:</span>
+								<span class="n">message</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+								<span class="bp">self</span><span class="o">.</span><span class="n">sequence</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;s&#39;</span><span class="p">)</span>
+
+								<span class="k">if</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;op&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">10</span><span class="p">:</span>  <span class="c1"># Opcode for Hello, contains heartbeat_interval</span>
+									<span class="bp">self</span><span class="o">.</span><span class="n">heartbeat_interval</span> <span class="o">=</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">][</span><span class="s1">&#39;heartbeat_interval&#39;</span><span class="p">]</span>
+									<span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">heartbeat_task</span><span class="p">:</span>
+										<span class="bp">self</span><span class="o">.</span><span class="n">heartbeat_task</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
+									<span class="bp">self</span><span class="o">.</span><span class="n">heartbeat_task</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">send_heartbeat</span><span class="p">(</span><span class="n">ws</span><span class="p">))</span>
+
+								<span class="k">if</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;t&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;READY&#39;</span><span class="p">:</span>
+									<span class="bp">self</span><span class="o">.</span><span class="n">session_id</span> <span class="o">=</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">][</span><span class="s1">&#39;session_id&#39;</span><span class="p">]</span>
+									<span class="bp">self</span><span class="o">.</span><span class="n">application_id</span> <span class="o">=</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">][</span><span class="s1">&#39;application&#39;</span><span class="p">][</span><span class="s1">&#39;id&#39;</span><span class="p">]</span>
+									<span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">event_handler</span><span class="o">.</span><span class="n">handle_event</span><span class="p">({</span>
+										<span class="s1">&#39;t&#39;</span><span class="p">:</span> <span class="s1">&#39;on_ready&#39;</span><span class="p">,</span>
+										<span class="s1">&#39;d&#39;</span><span class="p">:</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">]</span>
+									<span class="p">})</span>
+								<span class="k">elif</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;t&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;MESSAGE_CREATE&#39;</span><span class="p">:</span>
+									<span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">event_handler</span><span class="o">.</span><span class="n">handle_event</span><span class="p">(</span><span class="n">message</span><span class="p">))</span>
+									<span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">command_handler</span><span class="o">.</span><span class="n">handle_command</span><span class="p">(</span><span class="n">message</span><span class="p">))</span>
+								<span class="k">elif</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;t&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;INTERACTION_CREATE&#39;</span><span class="p">:</span>
+									<span class="n">valor</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;d&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+									<span class="k">if</span> <span class="n">valor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+										<span class="k">if</span> <span class="p">(</span><span class="s1">&#39;dropdown_select&#39;</span> <span class="ow">or</span> <span class="s1">&#39;button_click&#39;</span> <span class="ow">in</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">][</span><span class="s1">&#39;data&#39;</span><span class="p">]):</span>
+											<span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">event_handler</span><span class="o">.</span><span class="n">handle_event</span><span class="p">({</span>
+											<span class="s1">&#39;t&#39;</span><span class="p">:</span> <span class="s1">&#39;on_interaction_create&#39;</span><span class="p">,</span>
+											<span class="s1">&#39;d&#39;</span><span class="p">:</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">]</span>
+										<span class="p">})</span>
+										<span class="k">elif</span> <span class="p">(</span><span class="s1">&#39;dropdown_select&#39;</span> <span class="ow">or</span> <span class="s1">&#39;button_click&#39;</span> <span class="ow">in</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;components&#39;</span><span class="p">]):</span>
+											<span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">event_handler</span><span class="o">.</span><span class="n">handle_event</span><span class="p">({</span>
+											<span class="s1">&#39;t&#39;</span><span class="p">:</span> <span class="s1">&#39;on_interaction_send&#39;</span><span class="p">,</span>
+											<span class="s1">&#39;d&#39;</span><span class="p">:</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">]</span>
+										<span class="p">})</span>
+										<span class="k">if</span> <span class="s1">&#39;autocomplete&#39;</span> <span class="ow">in</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">][</span><span class="s1">&#39;data&#39;</span><span class="p">]:</span>
+											<span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">command_handler</span><span class="o">.</span><span class="n">handle_autocomplete</span><span class="p">(</span><span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">]))</span>
+
+										<span class="k">else</span><span class="p">:</span>
+											<span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">event_handler</span><span class="o">.</span><span class="n">handle_event</span><span class="p">(</span><span class="n">message</span><span class="p">))</span>
+											<span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">command_handler</span><span class="o">.</span><span class="n">handle_command</span><span class="p">(</span><span class="n">message</span><span class="p">))</span>
+								<span class="k">elif</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;t&#39;</span><span class="p">]</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">eventtypes</span><span class="p">:</span>
+<span class="w">									</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">									SEE: https://discord.com/developers/docs/resources/audit-log#audit-logs-resource</span>
+<span class="sd">									&quot;&quot;&quot;</span>
+									<span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">event_handler</span><span class="o">.</span><span class="n">handle_event</span><span class="p">({</span>
+											<span class="s1">&#39;t&#39;</span><span class="p">:</span> <span class="s1">&#39;on_audit_log_entry&#39;</span><span class="p">,</span>
+											<span class="s1">&#39;d&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;eventtype&#39;</span><span class="p">:</span> <span class="n">EventTypes</span><span class="p">[</span><span class="n">message</span><span class="p">[</span><span class="s1">&#39;t&#39;</span><span class="p">]],</span> <span class="s1">&#39;guild_id&#39;</span><span class="p">:</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">][</span><span class="s1">&#39;guild_id&#39;</span><span class="p">],</span> <span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">]}</span>
+										<span class="p">}))</span>
+			
+										
+								<span class="k">elif</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;t&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;ERROR&#39;</span><span class="p">:</span>
+									<span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">event_handler</span><span class="o">.</span><span class="n">handle_event</span><span class="p">({</span>
+										<span class="s1">&#39;t&#39;</span><span class="p">:</span> <span class="s1">&#39;on_error&#39;</span><span class="p">,</span>
+										<span class="s1">&#39;d&#39;</span><span class="p">:</span> <span class="n">message</span><span class="p">[</span><span class="s1">&#39;d&#39;</span><span class="p">]</span>
+									<span class="p">})</span>
+							<span class="k">elif</span> <span class="n">msg</span><span class="o">.</span><span class="n">type</span> <span class="ow">in</span> <span class="p">{</span><span class="n">aiohttp</span><span class="o">.</span><span class="n">WSMsgType</span><span class="o">.</span><span class="n">ERROR</span><span class="p">,</span> <span class="n">aiohttp</span><span class="o">.</span><span class="n">WSMsgType</span><span class="o">.</span><span class="n">CLOSED</span><span class="p">}:</span>
+								<span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">heartbeat_task</span><span class="p">:</span>
+									<span class="bp">self</span><span class="o">.</span><span class="n">heartbeat_task</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
+								<span class="k">break</span>
+			<span class="k">except</span> <span class="n">ClientResponseError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+				<span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">handle_rate_limit</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">response</span><span class="p">)</span>
+			<span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+				<span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unexpected exception: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+			<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Reconnecting in 5 seconds...&quot;</span><span class="p">)</span>
+			<span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span></div></div>
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">brazbot.py 0.1 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" >Module code</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">brazbot.bot</a></li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2024, MIT.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 4.3.2.
+    </div>
+  </body>
+</html>
