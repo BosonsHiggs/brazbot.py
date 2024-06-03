@@ -1,4 +1,5 @@
 # Byte-compiled / optimized / DLL files
+docs/
 brazbot/examples/__pycache__/
 brazbot/__pycache__/
 __pycache__/

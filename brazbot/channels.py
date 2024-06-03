@@ -18,6 +18,12 @@ class Channel:
 
     @classmethod
     async def from_channel_id(cls, bot, guild_id, channel_id):
+        cache_key = f"channel_{channel_id}"
+        data = bot.get_cache_data(cache_key)
+
+        if data:
+            return cls(data, bot)
+
         url = f"https://discord.com/api/v10/guilds/{guild_id}/channels/{channel_id}"
         headers = {
             "Authorization": f"Bot {bot.token}"
@@ -27,12 +33,51 @@ class Channel:
             async with session.get(url, headers=headers) as response:
                 if response.status == 200:
                     data = await response.json()
+                    bot.set_cache_data(cache_key, data, seconds=600)
                     return cls(data, bot)
                 else:
                     raise Exception(f"Failed to fetch channel data: {response.status}")
 
     def __str__(self):
         return self.name
+
+    async def send_message(self, content=None, embed=None, embeds=None, files=None, components=None, ephemeral=False):
+        url = f"{self.base_url}/channels/{self.id}/messages"
+        data = {}
+        if content:
+            data["content"] = str(content)
+        if embed:
+            data["embeds"] = [embed]
+        if embeds:
+            data["embeds"] = embeds
+        if components:
+            data["components"] = components
+        if ephemeral:
+            data["flags"] = 64  # This flag makes the response ephemeral
+
+        async with aiohttp.ClientSession() as session:
+            if files:
+                form = FormData()
+                form.add_field('payload_json', json.dumps(data))
+                for file in files:
+                    form.add_field('file', file['data'], filename=file['filename'], content_type=file['content_type'])
+                async with session.post(url, headers=self.headers, data=form) as response:
+                    if response.status != 200:
+                        logging.error(f"Failed to send message with file: {response.status} - {await response.text()}")
+                        return None
+                    else:
+                        response_json = await response.json()
+                        logging.info(f"Message sent with file: {response_json}")
+                        return response_json
+            else:
+                async with session.post(url, headers=self.headers, json=data) as response:
+                    if response.status != 200:
+                        logging.error(f"Failed to send message: {response.status} - {await response.text()}")
+                        return None
+                    else:
+                        response_json = await response.json()
+                        logging.info(f"Message sent: {response_json}")
+                        return response_json
 
     # Methods to interact with the Discord API
     async def clone(self, name=None, reason=None):

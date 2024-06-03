@@ -13,7 +13,6 @@ setup(
     install_requires=[
         "aiohttp"
     ],
-    ,
     entry_points={
         'console_scripts': [
             'brazbot = brazbot.bot:main',

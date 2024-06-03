@@ -32,6 +32,12 @@ class Thread:
 
     @classmethod
     async def from_thread_id(cls, bot, guild_id, thread_id):
+        cache_key = f"thread_{guild_id}"
+        data = bot.get_cache_data(cache_key)
+
+        if data:
+            return cls(data, bot)
+
         url = f"https://discord.com/api/v10/channels/{thread_id}"
         headers = {
             "Authorization": f"Bot {bot.token}"
@@ -41,6 +47,7 @@ class Thread:
             async with session.get(url, headers=headers) as response:
                 if response.status == 200:
                     data = await response.json()
+                    bot.set_cache_data(cache_key, data, seconds=120)
                     data['guild'] = guild_id
                     return cls(data, bot)
                 else:

@@ -9,6 +9,7 @@ from brazbot.member import Member
 from brazbot.roles import Role
 from brazbot.channels import Channel
 from brazbot.guilds import Guild
+from brazbot.channels import Channel
 
 logging.basicConfig(level=logging.DEBUG)
 #logging.getLogger().setLevel(logging.CRITICAL)
@@ -44,6 +45,10 @@ class CommandContext:
 
 	async def send_followup_message(self, content=None, embed=None, embeds=None, files=None, components=None, ephemeral=False):
 		await self.bot.message_handler.send_followup_message(self.bot.application_id, self.interaction["token"], content, embed, embeds, files, components, ephemeral)
+
+	async def get_channel(self, id=None):
+		_id = id if id is not None else self.channel_id
+		return await Channel.from_channel_id(self.bot, ctx.guild_id, _id)
 
 class CommandHandler:
 	def __init__(self, bot):

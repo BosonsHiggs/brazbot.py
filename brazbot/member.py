@@ -1,14 +1,15 @@
 import aiohttp
 from datetime import datetime
+from .roles import Role
 
 class Member:
-    def __init__(self, data, bot=None):
+    def __init__(self, data, bot=None, guild_id=None):
         self.bot = bot
         self.id = data.get('id')
         self.username = data.get('username')
         self.discriminator = data.get('discriminator')
         self.avatar = data.get('avatar')
-        self.bot = data.get('bot', False)
+        self.bot = bot
         self.system = data.get('system', False)
         self.mfa_enabled = data.get('mfa_enabled', False)
         self.locale = data.get('locale')
@@ -34,7 +35,7 @@ class Member:
         self.display_name = data.get('display_name', self.username)
         self.dm_channel = data.get('dm_channel')
         self.global_name = data.get('global_name')
-        self.guild = data.get('guild')
+        self.guild_id = guild_id
         self.guild_avatar = data.get('guild_avatar')
         self.guild_permissions = data.get('guild_permissions')
         self.joined_at = datetime.fromisoformat(data.get('joined_at')) if data.get('joined_at') else None
@@ -57,6 +58,12 @@ class Member:
 
     @classmethod
     async def from_user_id(cls, bot, user_id, guild_id=None):
+        cache_key = f"member_{user_id}"
+        data = bot.get_cache_data(cache_key)
+
+        if data:
+            return cls(data, bot, guild_id)
+
         url = f"https://discord.com/api/v10/users/{user_id}"
         headers = {
             "Authorization": f"Bot {bot.token}"
@@ -66,7 +73,8 @@ class Member:
             async with session.get(url, headers=headers) as response:
                 if response.status == 200:
                     data = await response.json()
-                    return cls(data, bot)
+                    bot.set_cache_data(cache_key, data, seconds=200)
+                    return cls(data, bot, guild_id)
                 else:
                     raise Exception(f"Failed to fetch user data: {response.status}")
 
@@ -74,8 +82,34 @@ class Member:
         return f"{self.username}#{self.discriminator}"
 
     # Methods to interact with the Discord API
+    async def add_role(self, role: Role, reason=None):
+        print()
+        try:
+            print(f"guild_id: {dir(role)}")
+        except Exception as e:
+            print(e)
+        try:
+            print(f"user_id: {self.id}")
+        except Exception as e:
+            print(e)
+        try:
+            print(f"role_id: {role.id}")
+        except Exception as e:
+            print(e)
+        print()
+        url = f"https://discord.com/api/v10/guilds/{self.guild_id}/members/{self.id}/roles/{role.id}"
+        headers = {
+            "Authorization": f"Bot {self.bot.token}",
+            "Content-Type": "application/json",
+            "X-Audit-Log-Reason": reason if reason else ""
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.put(url, headers=headers) as response:
+                if response.status != 204:
+                    raise Exception(f"Failed to add role {self.id} to member {member_id}: {response.status}")
+
     async def add_roles(self, *roles):
-        url = f"https://discord.com/api/v10/guilds/{self.guild['id']}/members/{self.id}/roles"
+        url = f"https://discord.com/api/v10/guilds/{self.guild_id}/members/{self.id}/roles"
         headers = {
             "Authorization": f"Bot {self.bot.token}",
             "Content-Type": "application/json"
@@ -87,7 +121,7 @@ class Member:
                         raise Exception(f"Failed to add role {role.id} to member {self.id}: {response.status}")
 
     async def ban(self, reason=None, delete_message_days=0):
-        url = f"https://discord.com/api/v10/guilds/{self.guild['id']}/bans/{self.id}"
+        url = f"https://discord.com/api/v10/guilds/{self.guild_id}/bans/{self.id}"
         headers = {
             "Authorization": f"Bot {self.bot.token}",
             "Content-Type": "application/json"
@@ -119,7 +153,7 @@ class Member:
                     raise Exception(f"Failed to create DM channel: {response.status}")
 
     async def edit(self, **fields):
-        url = f"https://discord.com/api/v10/guilds/{self.guild['id']}/members/{self.id}"
+        url = f"https://discord.com/api/v10/guilds/{self.guild_id}/members/{self.id}"
         headers = {
             "Authorization": f"Bot {self.bot.token}",
             "Content-Type": "application/json"
@@ -163,7 +197,7 @@ class Member:
         return self.timed_out_until is not None
 
     async def kick(self, reason=None):
-        url = f"https://discord.com/api/v10/guilds/{self.guild['id']}/members/{self.id}"
+        url = f"https://discord.com/api/v10/guilds/{self.guild_id}/members/{self.id}"
         headers = {
             "Authorization": f"Bot {self.bot.token}"
         }
@@ -176,7 +210,7 @@ class Member:
         return f"<@{self.id}>" in message['content']
 
     async def move_to(self, channel_id):
-        url = f"https://discord.com/api/v10/guilds/{self.guild['id']}/members/{self.id}"
+        url = f"https://discord.com/api/v10/guilds/{self.guild_id}/members/{self.id}"
         headers = {
             "Authorization": f"Bot {self.bot.token}",
             "Content-Type": "application/json"
@@ -202,7 +236,7 @@ class Member:
                     raise Exception(f"Failed to fetch pinned messages: {response.status}")
 
     async def remove_roles(self, *roles):
-        url = f"https://discord.com/api/v10/guilds/{self.guild['id']}/members/{self.id}/roles"
+        url = f"https://discord.com/api/v10/guilds/{self.guild_id}/members/{self.id}/roles"
         headers = {
             "Authorization": f"Bot {self.bot.token}",
             "Content-Type": "application/json"
@@ -214,7 +248,7 @@ class Member:
                         raise Exception(f"Failed to remove role {role.id} from member {self.id}: {response.status}")
 
     async def request_to_speak(self):
-        url = f"https://discord.com/api/v10/guilds/{self.guild['id']}/voice-states/{self.id}"
+        url = f"https://discord.com/api/v10/guilds/{self.guild_id}/voice-states/{self.id}"
         headers = {
             "Authorization": f"Bot {self.bot.token}",
             "Content-Type": "application/json"
@@ -248,7 +282,7 @@ class Member:
                     raise Exception(f"Failed to send message: {response.status}")
 
     async def timeout(self, duration, reason=None):
-        url = f"https://discord.com/api/v10/guilds/{self.guild['id']}/members/{self.id}"
+        url = f"https://discord.com/api/v10/guilds/{self.guild_id}/members/{self.id}"
         headers = {
             "Authorization": f"Bot {self.bot.token}",
             "Content-Type": "application/json"
@@ -273,7 +307,7 @@ class Member:
                     raise Exception(f"Failed to send typing indication: {response.status}")
 
     async def unban(self):
-        url = f"https://discord.com/api/v10/guilds/{self.guild['id']}/bans/{self.id}"
+        url = f"https://discord.com/api/v10/guilds/{self.guild_id}/bans/{self.id}"
         headers = {
             "Authorization": f"Bot {self.bot.token}"
         }

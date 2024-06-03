@@ -1,6 +1,7 @@
 import aiohttp
 from datetime import datetime
 from brazbot.member import Member
+from datetime import datetime, timedelta
 
 class Guild:
 	def __init__(self, data, bot=None):
@@ -68,6 +69,12 @@ class Guild:
 
 	@classmethod
 	async def from_guild_id(cls, bot, guild_id):
+		cache_key = f"guild_{guild_id}"
+		data = bot.get_cache_data(cache_key)
+
+		if data:
+			return cls(data, bot)
+
 		url = f"https://discord.com/api/v10/guilds/{guild_id}"
 		headers = {
 			"Authorization": f"Bot {bot.token}"
@@ -77,6 +84,7 @@ class Guild:
 			async with session.get(url, headers=headers) as response:
 				if response.status == 200:
 					data = await response.json()
+					bot.set_cache_data(cache_key, data, seconds=120)
 					return cls(data, bot)
 				else:
 					raise Exception(f"Failed to fetch guild data: {response.status}")

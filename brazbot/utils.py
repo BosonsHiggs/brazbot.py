@@ -1,5 +1,6 @@
 
 import uuid
+from datetime import datetime, timedelta
 
 def create_embed(title, description, color=0x5865F2):
     """
@@ -64,3 +65,7 @@ def generate_unique_id(max_length=8):
     shortened_int = int(shortened_hex, 16)
     
     return shortened_int
+
+def generate_list(l:list=None):
+    for n in l:
+        yield n

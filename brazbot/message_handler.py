@@ -18,52 +18,53 @@ class MessageHandler:
             "Authorization": f"Bot {self.token}"
         }
 
-    async def send_message(self, channel_id, content):
+    async def send_message(self, channel_id, content=None, embed=None, embeds=None, files=None, components=None, ephemeral=False):
         url = f"{self.base_url}/channels/{channel_id}/messages"
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=self.headers, json={"content": content}) as response:
-                if response.status != 200:
-                    logging.error(f"Failed to send message: {response.status} - {await response.text()}")
-                    return None
-                else:
-                    response_json = await response.json()
-                    logging.info(f"Message sent: {response_json}")
-                    return response_json
+        data = {}
+        if content:
+            data["content"] = str(content)
+        if embed:
+            data["embeds"] = [embed]
+        if embeds:
+            data["embeds"] = embeds
+        if components:
+            data["components"] = components
+        if ephemeral:
+            data["flags"] = 64  # This flag makes the response ephemeral
 
-    async def send_embed(self, channel_id, embed):
-        url = f"{self.base_url}/channels/{channel_id}/messages"
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=self.headers, json={"embeds": [embed]}) as response:
-                if response.status != 200:
-                    logging.error(f"Failed to send embed: {response.status} - {await response.text()}")
-                    return None
-                else:
-                    response_json = await response.json()
-                    logging.info(f"Embed sent: {response_json}")
-                    return response_json
-
-    async def send_file(self, channel_id, file_path):
-        url = f"{self.base_url}/channels/{channel_id}/messages"
-        with open(file_path, 'rb') as file:
-            form = FormData()
-            form.add_field('file', file, filename=file_path)
-            async with aiohttp.ClientSession() as session:
+            if files:
+                form = FormData()
+                form.add_field('payload_json', json.dumps(data))
+                for file in files:
+                    form.add_field('file', file['data'], filename=file['filename'], content_type=file['content_type'])
                 async with session.post(url, headers=self.headers, data=form) as response:
                     if response.status != 200:
-                        logging.error(f"Failed to send file: {response.status} - {await response.text()}")
+                        logging.error(f"Failed to send message with file: {response.status} - {await response.text()}")
                         return None
                     else:
                         response_json = await response.json()
-                        logging.info(f"File sent: {response_json}")
+                        logging.info(f"Message sent with file: {response_json}")
+                        return response_json
+            else:
+                async with session.post(url, headers=self.headers, json=data) as response:
+                    if response.status != 200:
+                        logging.error(f"Failed to send message: {response.status} - {await response.text()}")
+                        return None
+                    else:
+                        response_json = await response.json()
+                        logging.info(f"Message sent: {response_json}")
                         return response_json
 
-    async def edit_message(self, channel_id, message_id, content=None, embed=None, files=None, components=None):
+    async def edit_message(self, channel_id, message_id, content=None, embed=None, embeds=None, files=None, components=None):
         url = f"{self.base_url}/channels/{channel_id}/messages/{message_id}"
         data = {}
         if content:
             data["content"] = content
         if embed:
-            data["embeds"] = [embed] if isinstance(embed, dict) else embed
+            data["embeds"] = [embed]
+        if embeds:
+            data["embeds"] = embeds
         if components:
             data["components"] = components
 

@@ -39,6 +39,14 @@ async def role_info_command(ctx, role: Role):
     await ctx.defer()
     await ctx.send_followup_message(content=f'Role: {role.name}, Members: {role.members}')
 
+@bot.command(name="add_role", description="Add member role")
+@sync_slash_commands(guild_id=MY_GUILD)
+@describe(role="A role in the guild")
+async def role_info_command(ctx, member: Member, role: Role):
+    await ctx.defer()
+    await member.add_role(role, reason=None)
+    await ctx.send_followup_message(content=f'User {member.username} (ID: {member.id}) has been assigned the role {role.name}.')
+
 @bot.command(name="channel_info", description="Shows channel information")
 @sync_slash_commands(guild_id=MY_GUILD)
 @describe(channel="A channel in the guild")

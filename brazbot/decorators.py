@@ -1,8 +1,22 @@
 import aiohttp
+import asyncio
 import functools
+from functools import wraps
 from brazbot.cache import Cache
+from datetime import datetime, timedelta
+
 
 cache = Cache()
+
+def tasks(seconds=120):
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            while True:
+                await asyncio.sleep(seconds)
+                await func(*args, **kwargs)
+        return wrapper
+    return decorator
 
 def sync_slash_commands(guild_id=None):
     def decorator(func):
