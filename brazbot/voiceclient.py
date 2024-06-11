@@ -1,5 +1,3 @@
-brazbot/voiceclient.py:
-
 import aiohttp
 import asyncio
 import json
@@ -22,11 +20,12 @@ class VoiceClient:
         self.ws = None
         self.guild_id = channel.guild_id
         self.ssrc = None
-        self.encoder_process = None
+        self._encoder_process = None
         self._send_audio_task = None
         self.secret_key = None
         self._udp_ip = None
         self._udp_port = None
+        self._data = None
 
     async def connect(self):
         voice_state_update = {
@@ -42,7 +41,7 @@ class VoiceClient:
 
         voice_state_update = await self.bot.wait_for(
             'VOICE_STATE_UPDATE',
-            check=lambda event: event['d']['guild_id'] == self.channel.guild_id and event['d']['user_id'] == self.bot.application_id
+            check=lambda event: event['d']['guild_id'] == self.channel.guild_id and event['d']['member']['user']['id'] == self.bot.application_id
         )
         self.session_id = voice_state_update['d']['session_id']
 
@@ -132,11 +131,12 @@ class VoiceClient:
                         ffmpeg.stdin.write(chunk)
                     ffmpeg.stdin.close()
                     await ffmpeg.wait()
-                    if self.encoder_process:
+                    if self._encoder_process:
+                        self._data = await self._encoder_process.stdout.read(3840)  # 20ms de áudio
                         self._send_audio_task = asyncio.create_task(self.send_audio_packets())
 
     async def create_ffmpeg_process(self):
-        self.encoder_process = await asyncio.create_subprocess_exec(
+        self._encoder_process = await asyncio.create_subprocess_exec(
             'ffmpeg',
             '-i', 'pipe:0',
             '-f', 's16le',
@@ -147,20 +147,20 @@ class VoiceClient:
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL
         )
-        return self.encoder_process
+        return self._encoder_process
 
     async def send_audio_packets(self):
         sequence_number = 0
         timestamp = 0
-        print(1)
-        await self.set_speaking(True)
-        print(2, dir(self.encoder_process))
-        while self.encoder_process is not None:
-            print(3)
-            print(f'\n\n\nself.encoder_process: {self.encoder_process}\n\n\n')
-            data = await self.encoder_process.stdout.read(3840)  # 20ms de áudio
-            if not data:
+
+        print(00000000)
+        print(f"\n\n\nself._data: {self._data}\n\n\n")
+        while self._data is not None:
+            print(10000000)
+            
+            if not self._data:
                 break
+            data = self._data 
 
             header = bytearray(12)
             header[0] = 0x80
@@ -198,112 +198,9 @@ class VoiceClient:
         await self.ws.send(json.dumps(payload))
 
     async def stop(self):
-        if self.encoder_process:
-            self.encoder_process.terminate()
-            self.encoder_process = None
+        if self._encoder_process:
+            self._encoder_process.terminate()
+            self._encoder_process = None
         if self._send_audio_task:
             self._send_audio_task.cancel()
             self._send_audio_task = None
-
-
-example_music_bot.py:
-
-import os
-import asyncio
-import logging
-import aiohttp
-from brazbot.bot import DiscordBot
-from brazbot.decorators import sync_slash_commands, rate_limit, describe
-from brazbot.voiceclient import VoiceClient
-from brazbot.channels import VoiceChannel
-
-MY_GUILD = "1130837584742977697"
-
-class MyBot(DiscordBot):
-    def __init__(self, token, command_prefix=None, intents=None):
-        super().__init__(token, command_prefix, intents)
-        self.voice_client = None
-        self.queue = []
-        self.currently_playing = None
-
-    async def on_ready(self, data):
-        print(f"Bot is ready! Application ID: {self.application_id}")
-        await self.command_handler.sync_commands(guild_id=MY_GUILD)
-
-    async def on_message_create(self, data):
-        print(f"Message create event received: {data}")
-
-    async def on_error(self, data):
-        if 'time_left' in data:
-            time_left = data['time_left']
-            error_message = f"You have reached the usage limit for this command. Please try again in {time_left:.2f} seconds."
-
-            embed = create_error_embed(error_message)
-
-            if self.interaction:
-                await self.message_handler.send_interaction(
-                    self.interaction,
-                    embeds=[embed]
-                )
-            else:
-                print(error_message)
-        else:
-            error_message = data.get('message', 'Ocorreu um erro.')
-            print(error_message)
-
-    async def play_next(self):
-        if self.queue:
-            self.currently_playing = self.queue.pop(0)
-            if self.voice_client:
-                await self.voice_client.play(self.currently_playing)
-        else:
-            self.currently_playing = None
-
-    async def join_voice_channel(self, ctx, voice_channel):
-        try:
-            self.voice_client = VoiceClient(self, voice_channel)
-            await self.voice_client.connect()
-        except Exception as e:
-            print(e)
-        await ctx.send_followup_message(f"Joined voice channel: {voice_channel.name}")
-
-    async def add_to_queue(self, ctx, file_url):
-        self.queue.append(file_url)
-        await ctx.send_followup_message(f"Added to queue: {file_url}")
-        if not self.currently_playing:
-            await self.play_next()
-
-# Define the necessary intents
-intents = ["GUILDS", "GUILD_VOICE_STATES", "GUILD_MESSAGES", "MESSAGE_CONTENT"]
-token = os.getenv("DISCORD_TOKEN")
-bot = MyBot(token, command_prefix="!", intents=intents)
-
-@bot.command(name="join", description="Join a voice channel")
-@sync_slash_commands(guild_id=MY_GUILD)
-@rate_limit(limit=1, per=5, scope="user")
-@describe(channel="A channel in the guild")
-async def join_command(ctx, channel: VoiceChannel):
-    await ctx.defer()
-    try:
-        await bot.join_voice_channel(ctx, channel)
-    except Exception as e:
-        await ctx.send_followup_message(f"Failed to join voice channel: {str(e)}")
-
-@bot.command(name="play", description="Play an mp3 file from a URL")
-@sync_slash_commands(guild_id=MY_GUILD)
-@rate_limit(limit=1, per=5, scope="user")
-async def play_command(ctx, file_url: str):
-    await ctx.defer()
-    if bot.voice_client is None:
-        await ctx.send_followup_message("Bot is not connected to a voice channel.")
-        return
-    await bot.add_to_queue(ctx, file_url)
-
-# Main function to start the bot
-async def main():
-    await bot.start()
-
-# Run the bot asynchronously
-asyncio.run(main())
-
-

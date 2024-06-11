@@ -155,3 +155,4 @@ class Role:
                     return Role(data, bot)
                 else:
                     raise Exception(f"Failed to create role: {response.status}")
+

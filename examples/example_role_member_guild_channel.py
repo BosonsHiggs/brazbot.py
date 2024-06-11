@@ -61,11 +61,8 @@ async def guild_info_command(ctx, guild: Guild):
     await ctx.defer()
 
     members = await guild.fetch_all_members()
-    print(type(members))
-    print()
     for member in members:
-        print(member)
-        #await ctx.send_followup_message(content=f'Guild: {guild.name}, Member: {member.username}')
+        await ctx.send_followup_message(content=f'Guild: {guild.name}, Member: {member.username}')
 
 async def main():
     await bot.start()
