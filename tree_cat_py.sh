@@ -35,6 +35,7 @@ files_all=(
 )
 
 files=(
+    "brazbot/bot.py"
     "brazbot/voiceclient.py"
     "example_music_bot.py"
 )

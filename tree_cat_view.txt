@@ -1,3 +1,319 @@
+brazbot/bot.py:
+
+import json
+import asyncio
+import aiohttp
+import logging
+from aiohttp import ClientResponseError
+from brazbot.events import EventHandler
+from brazbot.commands import CommandHandler
+from brazbot.message_handler import MessageHandler
+from brazbot.cache import Cache
+from brazbot.audit_log_entry import AuditLogEntry
+from brazbot.eventstype import EventTypes
+from brazbot.decorators import tasks
+from datetime import datetime, timedelta
+
+# Mapeamento de intents
+INTENTS = {
+    "GUILDS": 1 << 0,
+    "GUILD_MEMBERS": 1 << 1,
+    "GUILD_MODERATION": 1 << 2,
+    "GUILD_EMOJIS_AND_STICKERS": 1 << 3,
+    "GUILD_INTEGRATIONS": 1 << 4,
+    "GUILD_WEBHOOKS": 1 << 5,
+    "GUILD_INVITES": 1 << 6,
+    "GUILD_VOICE_STATES": 1 << 7,
+    "GUILD_PRESENCES": 1 << 8,
+    "GUILD_MESSAGES": 1 << 9,
+    "GUILD_MESSAGE_REACTIONS": 1 << 10,
+    "GUILD_MESSAGE_TYPING": 1 << 11,
+    "DIRECT_MESSAGES": 1 << 12,
+    "DIRECT_MESSAGE_REACTIONS": 1 << 13,
+    "DIRECT_MESSAGE_TYPING": 1 << 14,
+    "MESSAGE_CONTENT": 1 << 15,
+    "GUILD_SCHEDULED_EVENTS": 1 << 16,
+    "AUTO_MODERATION_CONFIGURATION": 1 << 20,
+    "AUTO_MODERATION_EXECUTION": 1 << 21,
+    "GUILD_MESSAGE_POLLS": 1 << 24,
+    "DIRECT_MESSAGE_POLLS": 1 << 25
+}
+
+logging.basicConfig(level=logging.DEBUG)
+
+class DiscordBot:
+    def __init__(self, token, command_prefix=None, intents=None, num_shards=1, shard_id=0):
+        self.token = token
+        self.endpoint = "wss://gateway.discord.gg/?v=10"
+        self.session_id = None
+        self.voice_server_endpoint = None
+        self.command_prefix = command_prefix
+        self.intents = self.calculate_intents(intents if intents is not None else ["GUILDS", "GUILD_VOICE_STATES"])
+
+        self.num_shards = num_shards
+        self.shard_id = shard_id
+        self.base_url = "https://discord.com/api/v10"
+        self.headers = {
+            "Authorization": f"Bot {self.token}",
+            "Content-Type": "application/json"
+        }
+
+        self.event_handler = EventHandler()
+        self.command_handler = CommandHandler(self)
+        self.message_handler = MessageHandler(self.token)
+        self.cache = Cache()
+        self.application_id = None
+        self.heartbeat_interval = None
+        self.heartbeat_task = None
+        self.session_id = None
+        self.sequence = None
+        self.cogs = []
+        self.eventtypes = tuple(map(lambda event_type: event_type.name, EventTypes))
+        self.cache = {}
+        self.wait_for_futures = []
+        self.auto_register_events()
+        self._ws = None
+        self.message_queue = asyncio.Queue()
+
+    def get_cache_data(self, key):
+        if key in self.cache:
+            entry = self.cache[key]
+            if entry['expiry'] > datetime.now():
+                return entry['data']
+            else:
+                self.delete_cache_data(key)
+        return None
+
+    def set_cache_data(self, key, data, seconds=60):
+        self.cache[key] = {
+            'data': data,
+            'expiry': datetime.now() + timedelta(seconds=seconds)
+        }
+
+    def delete_cache_data(self, key):
+        if key in self.cache:
+            del self.cache[key]
+
+    def update_cache_data(self, key, data):
+        if key in self.cache:
+            self.cache[key]['data'] = data
+
+    @tasks(seconds=120)
+    async def _cache_cleanup_task(self):
+        now = datetime.now()
+        keys_to_delete = [key for key, entry in self.cache.items() if entry['expiry'] <= now]
+        for key in keys_to_delete:
+            self.delete_cache_data(key)
+        print(f"Deleted {len(keys_to_delete)} expired cache keys.")
+
+    def calculate_intents(self, intents):
+        if isinstance(intents, list):
+            return sum(INTENTS[intent] for intent in intents if intent in INTENTS)
+        return 0
+
+    def event(self, func):
+        event_name = func.__name__
+        self.event_handler.register(event_name, func)
+        return func
+
+    def command(self, name=None, description=None):
+        def decorator(func):
+            self.command_handler.register_command(func, name, description)
+            return func
+        return decorator
+
+    def auto_register_events(self):
+        for attr_name in dir(self):
+            if attr_name.startswith("on_"):
+                attr = getattr(self, attr_name)
+                if callable(attr):
+                    self.event(attr)
+
+    def add_cog(self, cog):
+        self.cogs.append(cog)
+        for attr_name in dir(cog):
+            attr = getattr(cog, attr_name)
+            if callable(attr):
+                if attr_name.startswith("on_"):
+                    self.event(attr)
+                elif hasattr(attr, "_command"):
+                    self.command(attr._command["name"], attr._command["description"])(attr)
+
+    async def setup_hook(self):
+        pass
+
+    async def send_heartbeat(self, ws):
+        while True:
+            await asyncio.sleep(self.heartbeat_interval / 1000)
+            await ws.send_json({"op": 1, "d": self.sequence})
+
+    async def handle_rate_limit(self, response):
+        if response.status == 429:
+            retry_after = int(response.headers.get("Retry-After", 1))
+            is_global = response.headers.get("X-RateLimit-Global", False)
+            rate_limit_scope = response.headers.get("X-RateLimit-Scope", "unknown")
+
+            logging.error(f"Rate limited. Retry after {retry_after} seconds. Scope: {rate_limit_scope}. Global: {is_global}")
+            await asyncio.sleep(retry_after)
+
+    async def change_presence(self, activity_name, activity_type=0):
+        presence_payload = {
+            "op": 3,
+            "d": {
+                "since": None,
+                "activities": [
+                    {
+                        "name": activity_name,
+                        "type": activity_type
+                    }
+                ],
+                "status": "online",
+                "afk": False
+            }
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.ws_connect(f"{self.endpoint}&encoding=json") as ws:
+                await ws.send_json(presence_payload)
+
+    async def wait_for(self, event_type, check, timeout=None):
+        future = asyncio.get_event_loop().create_future()
+        self.wait_for_futures.append((future, check))
+        return await asyncio.wait_for(future, timeout)
+
+    async def message_listener(self):
+        while True:
+            message = await self.message_queue.get()
+            await self.process_message(message)
+
+    async def process_message(self, message):
+        message = json.loads(message)
+        self.sequence = message.get('s')
+
+        if message['op'] == 10:
+            self.heartbeat_interval = message['d']['heartbeat_interval']
+            if self.heartbeat_task:
+                self.heartbeat_task.cancel()
+            self.heartbeat_task = asyncio.create_task(self.send_heartbeat(self._ws))
+
+        if message['t'] == 'READY':
+            self._ws = self._ws
+            self.endpoint = message['d']['resume_gateway_url']
+            self.session_id = message['d']['session_id']
+            self.application_id = message['d']['application']['id']
+            await self.event_handler.handle_event({
+                't': 'on_ready',
+                'd': message['d']
+            })
+
+        elif message['t'] == 'MESSAGE_CREATE':
+            asyncio.create_task(self.event_handler.handle_event(message))
+            asyncio.create_task(self.command_handler.handle_command(message))
+
+        if message['t'] == 'VOICE_SERVER_UPDATE':
+            self.voice_server_endpoint = message['d']['endpoint']
+            asyncio.create_task(self.event_handler.handle_event({
+                't': 'on_voice_server_update',
+                'd': message['d']
+            }))
+        elif message['t'] == 'VOICE_STATE_UPDATE':
+            if 'endpoint' in message['d']:
+                self.voice_server_endpoint = message['d']['endpoint']
+            asyncio.create_task(self.event_handler.handle_event({
+                't': 'on_voice_state_update',
+                'd': message['d']
+            }))
+        elif message['t'] == 'INTERACTION_CREATE':
+            valor = message.get('d', None)
+            if valor is not None:
+                if ('dropdown_select' or 'button_click' in message['d']['data']):
+                    await self.event_handler.handle_event({
+                        't': 'on_interaction_create',
+                        'd': message['d']
+                    })
+                elif ('dropdown_select' or 'button_click' in message['components']):
+                    await self.event_handler.handle_event({
+                        't': 'on_interaction_send',
+                        'd': message['d']
+                    })
+                if 'autocomplete' in message['d']['data']:
+                    asyncio.create_task(self.command_handler.handle_autocomplete(message['d']))
+
+                else:
+                    asyncio.create_task(self.event_handler.handle_event(message))
+                    asyncio.create_task(self.command_handler.handle_command(message))
+
+        elif message['t'] in self.eventtypes:
+            asyncio.create_task(self.event_handler.handle_event({
+                't': 'on_audit_log_entry',
+                'd': {'eventtype': EventTypes[message['t']], 'guild_id': message['d']['guild_id'], 'data': message['d']}
+            }))
+
+        elif message['t'] == 'ERROR':
+            await self.event_handler.handle_event({
+                't': 'on_error',
+                'd': message['d']
+            })
+
+        # Handle wait_for futures
+        for future, check in self.wait_for_futures:
+            if check(message):
+                future.set_result(message)
+                self.wait_for_futures.remove((future, check))
+
+    async def start(self):
+        asyncio.create_task(self._cache_cleanup_task())
+        await self.setup_hook()
+
+        while True:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.ws_connect(f"{self.endpoint}&encoding=json") as ws:
+
+                        identify_payload = {
+                            "op": 2,
+                            "d": {
+                                "token": self.token,
+                                "intents": self.intents,
+                                "properties": {
+                                    "$os": "linux",
+                                    "$browser": "brazbot.py",
+                                    "$device": "brazbot.py"
+                                },
+                                "shard": [self.shard_id, self.num_shards]
+                            }
+                        }
+
+                        if self.session_id and self.sequence:
+                            await ws.send_json({
+                                "op": 6,
+                                "d": {
+                                    "token": self.token,
+                                    "session_id": self.session_id,
+                                    "seq": self.sequence
+                                }
+                            })
+                        else:
+                            await ws.send_json(identify_payload)
+
+                        self._ws = ws
+                        asyncio.create_task(self.message_listener())
+
+                        async for msg in ws:
+                            if msg.type == aiohttp.WSMsgType.TEXT:
+                                await self.message_queue.put(msg.data)
+                            elif msg.type in {aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSED}:
+                                if self.heartbeat_task:
+                                    self.heartbeat_task.cancel()
+                                break
+            except ClientResponseError as e:
+                await self.handle_rate_limit(e.response)
+            except Exception as e:
+                logging.error(f"Unexpected exception: {e}")
+
+            print("Reconnecting in 5 seconds...")
+            await asyncio.sleep(5)
+
+
 brazbot/voiceclient.py:
 
 import aiohttp
@@ -5,11 +321,14 @@ import asyncio
 import json
 import websockets
 import subprocess
-import socket
-from subprocess import Popen, PIPE
+from subprocess import PIPE
 import nacl.secret
 import nacl.utils
 from struct import pack
+import logging
+import socket
+
+logging.basicConfig(level=logging.DEBUG)
 
 class VoiceClient:
     def __init__(self, bot, channel):
@@ -22,13 +341,38 @@ class VoiceClient:
         self.ws = None
         self.guild_id = channel.guild_id
         self.ssrc = None
-        self.encoder_process = None
+        self._encoder_process = None
         self._send_audio_task = None
         self.secret_key = None
         self._udp_ip = None
         self._udp_port = None
+        self.bitrate = 64000  # Default bitrate in bits per second (64 kbps)
+        self.udp_socket = None
+        self.external_ip = None
+        self.external_port = None
 
     async def connect(self):
+        await self._update_voice_state()
+        await self._handle_voice_server_update()
+        await self._connect_to_websocket()
+        await self.identify()
+        await self.update_bitrate()
+
+    async def update_bitrate(self):
+        headers = {
+            "Authorization": f"Bot {self.bot.token}",
+            "Content-Type": "application/json"
+        }
+        async with aiohttp.ClientSession(headers=headers) as session:
+            async with session.get(f"https://discord.com/api/v10/channels/{self.channel.id}") as response:
+                if response.status == 200:
+                    data = await response.json()
+                    self.bitrate = data.get('bitrate', self.bitrate)
+                    logging.debug(f"Channel bitrate: {self.bitrate}")
+                else:
+                    logging.error(f"Failed to get channel info: {response.status}")
+
+    async def _update_voice_state(self):
         voice_state_update = {
             "op": 4,
             "d": {
@@ -42,22 +386,41 @@ class VoiceClient:
 
         voice_state_update = await self.bot.wait_for(
             'VOICE_STATE_UPDATE',
-            check=lambda event: event['d']['guild_id'] == self.channel.guild_id and event['d']['user_id'] == self.bot.application_id
+            check=self._check_voice_state_update
         )
-        self.session_id = voice_state_update['d']['session_id']
+        
+        if 'd' in voice_state_update:
+            self.session_id = voice_state_update['d']['session_id']
+        else:
+            raise Exception("Failed to update voice state")
 
+    async def _handle_voice_server_update(self):
         voice_server_update = await self.bot.wait_for(
             'VOICE_SERVER_UPDATE',
-            check=lambda event: event['d']['guild_id'] == self.channel.guild_id
+            check=self._check_voice_server_update
         )
-        self.endpoint = voice_server_update['d']['endpoint']
-        self.token = voice_server_update['d']['token']
+
+        if 'd' in voice_server_update:
+            self.endpoint = voice_server_update['d']['endpoint']
+            self.token = voice_server_update['d']['token']
+        else:
+            raise Exception("Failed to handle voice server update")
 
         if not self.endpoint.startswith("wss://"):
             self.endpoint = "wss://" + self.endpoint
 
+    async def _connect_to_websocket(self):
         self.ws = await websockets.connect(f"{self.endpoint}?v=4")
-        await self.identify()
+
+    def _check_voice_state_update(self, event):
+        if 'user_id' in event['d']:
+            return event['d']['guild_id'] == self.channel.guild_id and event['d']['user_id'] == self.bot.application_id
+        elif 'member' in event['d']:
+            return event['d']['guild_id'] == self.channel.guild_id and event['d']['member']['user']['id'] == self.bot.application_id
+        return False
+
+    def _check_voice_server_update(self, event):
+        return 'd' in event and event['d']['guild_id'] == self.channel.guild_id
 
     async def identify(self):
         payload = {
@@ -75,6 +438,9 @@ class VoiceClient:
             response = await self.ws.recv()
             response_data = json.loads(response)
 
+            if response_data['op'] == 5:
+                self.ssrc = response_data['d']['ssrc']
+
             if response_data['op'] == 8:  # Opcode 8: Hello
                 self.heartbeat_interval = response_data['d']['heartbeat_interval']
                 asyncio.create_task(self.heartbeat())
@@ -83,10 +449,7 @@ class VoiceClient:
                 self._udp_ip = response_data['d']['ip']
                 self._udp_port = response_data['d']['port']
                 self.ssrc = response_data['d']['ssrc']
-                try:
-                    await self.select_protocol()
-                except Exception as e:
-                    print(f"ERROR PROTOCOL: {e}")
+                await self.setup_udp_connection()
                 break
 
     async def select_protocol(self):
@@ -95,89 +458,246 @@ class VoiceClient:
             "d": {
                 "protocol": "udp",
                 "data": {
-                    "address": self._udp_ip,
-                    "port": self._udp_port,
-                    "mode": "xsalsa20_poly1305"
+                    "address": self.external_ip,
+                    "port": self.external_port,
+                    "mode": "xsalsa20_poly1305"  # Escolha do modo
                 }
             }
         }
         await self.ws.send(json.dumps(payload))
 
-        # Receive session description
         while True:
             response = await self.ws.recv()
             response_data = json.loads(response)
-
             if response_data['op'] == 4:  # Opcode 4: Session Description
                 self.secret_key = response_data['d']['secret_key']
-                self._send_audio_task = asyncio.create_task(self.send_audio_packets())
                 break
 
     async def heartbeat(self):
-        while self.heartbeat_interval is not None:
-            await asyncio.sleep(self.heartbeat_interval / 1000)
-            await self.ws.send(json.dumps({"op": 3, "d": None}))
+        try:
+            while self.heartbeat_interval is not None:
+                await asyncio.sleep(self.heartbeat_interval / 1000)
+                await self.ws.send(json.dumps({"op": 3, "d": None}))
+        except websockets.exceptions.ConnectionClosedError as e:
+            logging.error(f"Heartbeat error: {e}. Attempting to reconnect.")
+            await self.resume()
+
+    async def reconnect(self, new_session=False):
+        logging.debug("Reconectando...")
+        await self.disconnect()
+        if new_session:
+            self.session_id = None
+            await self.connect()
+        else:
+            await self.resume()
+
+    async def resume(self):
+        logging.debug("Tentando retomar a sessão")
+        try:
+            await self._connect_to_websocket()
+            payload = {
+                "op": 7,
+                "d": {
+                    "server_id": str(self.guild_id),
+                    "session_id": str(self.session_id),
+                    "token": self.token
+                }
+            }
+            await self.ws.send(json.dumps(payload))
+
+            while True:
+                response = await self.ws.recv()
+                response_data = json.loads(response)
+
+                if response_data['op'] == 9:  # Opcode 9: Resumed
+                    logging.info("Sessão retomada com sucesso.")
+                    break
+                elif response_data['op'] == 8:  # Opcode 8: Hello
+                    self.heartbeat_interval = response_data['d']['heartbeat_interval']
+                    asyncio.create_task(self.heartbeat())
+                    break
+                elif response_data['op'] == 4:
+                    # Handle Session Description if needed
+                    pass
+                else:
+                    logging.error(f"Erro ao retomar a sessão: {response_data}")
+                    await self.reconnect(new_session=True)
+                    break
+        except websockets.exceptions.ConnectionClosedError as e:
+            logging.error(f"ConnectionClosedError: {e}. Tentando reconectar.")
+            await self.reconnect(new_session=True)
+        except Exception as e:
+            logging.error(f"Erro durante retomar sessão: {e}")
+            await self.reconnect(new_session=True)
 
     async def disconnect(self):
+        if self.heartbeat_interval:
+            self.heartbeat_interval = None
+
         if self.ws:
             await self.ws.close()
             self.ws = None
 
     async def play(self, source_url):
+        logging.debug("play 1")
         async with aiohttp.ClientSession() as session:
             async with session.get(source_url) as response:
+                logging.debug("play 2")
                 if response.status == 200:
-                    ffmpeg = await self.create_ffmpeg_process()
-                    async for chunk in response.content.iter_chunked(1024):
-                        ffmpeg.stdin.write(chunk)
-                    ffmpeg.stdin.close()
-                    await ffmpeg.wait()
-                    if self.encoder_process:
-                        self._send_audio_task = asyncio.create_task(self.send_audio_packets())
+                    logging.debug("play 3")
+                    try:
+                        logging.debug("Creating ffmpeg process")
+                        ffmpeg_process = await self.create_ffmpeg_process()
+                        logging.debug(f"play 3: {ffmpeg_process}")
+
+                        if ffmpeg_process is None:
+                            logging.error("Process creation failed")
+                            return
+                        logging.debug("play 4")
+                        self._encoder_process = ffmpeg_process  # Ensure _encoder_process is set
+                        logging.debug(f"play 5: {self._encoder_process}")
+
+                        async for chunk in response.content.iter_chunked(1024):
+                            logging.debug("play 6")
+                            if ffmpeg_process.stdin is not None:
+                                logging.debug("play 7")
+                                ffmpeg_process.stdin.write(chunk)
+                                logging.debug("play 8")
+                            else:
+                                raise Exception("ffmpeg_process.stdin is None")
+                        logging.debug("play 9")
+                        ffmpeg_process.stdin.close()
+                        logging.debug("play 10")
+                        #await self._read_process_output(ffmpeg_process, "ffmpeg")
+                        logging.debug("play 11")
+                        if self._encoder_process:
+                            logging.debug("play 12")
+                            self._send_audio_task = asyncio.create_task(self.send_audio_packets())
+                            logging.debug("play 13")
+                    except Exception as e:
+                        logging.error(f"Error in play: {e}")
+                else:
+                    logging.error(f"Failed to fetch audio from URL: {response.status}")
 
     async def create_ffmpeg_process(self):
-        self.encoder_process = await asyncio.create_subprocess_exec(
-            'ffmpeg',
-            '-i', 'pipe:0',
-            '-f', 's16le',
-            '-ar', '48000',
-            '-ac', '2',
-            'pipe:1',
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL
-        )
-        return self.encoder_process
+        try:
+            logging.debug("create_ffmpeg_process 1")
+            ffmpeg_process = await asyncio.create_subprocess_exec(
+                'ffmpeg',
+                '-i', 'pipe:0',  # Entrada de áudio a partir do pipe
+                '-f', 's16le',
+                '-ar', '48000',
+                '-ac', '2',
+                '-b:a', str(self.bitrate),  # Configure the bitrate
+                'pipe:1',  # Saída de áudio para pipe
+                stdin=PIPE,
+                stdout=PIPE,
+                stderr=PIPE,
+                bufsize=0  # Setting bufsize to 0 as required
+            )
+            logging.debug(f"create_ffmpeg_process 2: {ffmpeg_process}")
+            logging.debug(f"ffmpeg process created with PID: {ffmpeg_process.pid}")
+            return ffmpeg_process
+
+        except Exception as e:
+            logging.error(f"Failed to create ffmpeg process: {e}")
+            return None
+
+    async def _read_process_output(self, process, name):
+        logging.debug(f"Reading stdout for process: {name}")
+        if process.stdout is not None:
+            while True:
+                line = await process.stdout.read(1024)
+                if not line:
+                    break
+                try:
+                    logging.debug(f"{name} stdout: {line}")
+                except Exception as e:
+                    logging.error(f"Error reading {name} stdout: {e}")
+
+        if process.stderr is not None:
+            logging.debug(f"Reading stderr for process: {name}")
+            while True:
+                line = await process.stderr.read(1024)
+                if not line:
+                    break
+                try:
+                    logging.debug(f"{name} stderr: {line.decode('utf-8', errors='replace')}")
+                except Exception as e:
+                    logging.error(f"Error reading {name} stderr: {e}")
 
     async def send_audio_packets(self):
         sequence_number = 0
         timestamp = 0
-        print(1)
         await self.set_speaking(True)
-        print(2, dir(self.encoder_process))
-        while self.encoder_process is not None:
-            print(3)
-            print(f'\n\n\nself.encoder_process: {self.encoder_process}\n\n\n')
-            data = await self.encoder_process.stdout.read(3840)  # 20ms de áudio
-            if not data:
+        while self._encoder_process is not None:
+            try:
+                data = await self._encoder_process.stdout.read(3840)  # 20ms de áudio
+                if not data:
+                    stderr_output = await self._encoder_process.stderr.read()
+                    logging.debug(f"ffmpeg stderr: {stderr_output.decode()}")
+                    break
+                logging.debug(f"Sending audio packet with sequence number: {sequence_number}")
+
+                header = bytearray(12)
+                header[0] = 0x80
+                header[1] = 0x78
+                header[2:4] = pack('>H', sequence_number)  # Sequence number
+                header[4:8] = pack('>I', timestamp)  # Timestamp
+                header[8:12] = pack('>I', self.ssrc)  # SSRC
+
+                packet = self.encrypt_packet(header, data)
+                await self.ws.send(packet)
+
+                sequence_number += 1
+                timestamp += 960  # 48kHz / 50fps = 960
+
+                await asyncio.sleep(0.02)
+
+            except websockets.exceptions.ConnectionClosedError as e:
+                if e.code == 4006:
+                    logging.error("Error 4006: Session is no longer valid. Attempting to reconnect.")
+                    await self.resume()
+                else:
+                    logging.error(f"ConnectionClosedError: {e}")
+                break
+            except Exception as e:
+                logging.error(f"Error while sending audio packets: {e}")
                 break
 
-            header = bytearray(12)
-            header[0] = 0x80
-            header[1] = 0x78
-            header[2:4] = pack('>H', sequence_number)  # Sequence number
-            header[4:8] = pack('>I', timestamp)  # Timestamp
-            header[8:12] = pack('>I', self.ssrc)  # SSRC
-
-            packet = self.encrypt_packet(header, data)
-            await self.ws.send(packet)
-
-            sequence_number += 1
-            timestamp += 960  # 48kHz / 50fps = 960
-
-            await asyncio.sleep(0.02)
-
+        await self.send_silence()
         await self.set_speaking(False)
+
+    async def send_silence(self):
+        silence_frame = b'\xF8\xFF\xFE' * 5
+        for _ in range(5):
+            try:
+                header = bytearray(12)
+                header[0] = 0x80
+                header[1] = 0x78
+                header[2:4] = pack('>H', 0)  # Sequence number
+                header[4:8] = pack('>I', 0)  # Timestamp
+                header[8:12] = pack('>I', self.ssrc)  # SSRC
+
+                packet = self.encrypt_packet(header, silence_frame)
+                await self.ws.send(packet)
+                await asyncio.sleep(0.02)
+            except Exception as e:
+                logging.error(f"Error while sending silence: {e}")
+
+    async def setup_udp_connection(self):
+        self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.udp_socket.setblocking(False)
+        self.udp_socket.sendto(b'\x01\x00\x00\x00' + pack('>I', self.ssrc), (self._udp_ip, self._udp_port))
+        
+        def parse_ip_and_port(response):
+            ip = response[8:72].split(b'\x00', 1)[0].decode('ascii')
+            port = int.from_bytes(response[72:74], 'big')
+            return ip, port
+        
+        response = await asyncio.get_event_loop().sock_recv(self.udp_socket, 1024)
+        self.external_ip, self.external_port = parse_ip_and_port(response)
+        await self.select_protocol()
 
     def encrypt_packet(self, header, data):
         nonce = bytearray(24)
@@ -198,12 +718,13 @@ class VoiceClient:
         await self.ws.send(json.dumps(payload))
 
     async def stop(self):
-        if self.encoder_process:
-            self.encoder_process.terminate()
-            self.encoder_process = None
+        if self._encoder_process:
+            self._encoder_process.terminate()
+            self._encoder_process = None
         if self._send_audio_task:
             self._send_audio_task.cancel()
             self._send_audio_task = None
+
 
 
 example_music_bot.py:
@@ -216,6 +737,7 @@ from brazbot.bot import DiscordBot
 from brazbot.decorators import sync_slash_commands, rate_limit, describe
 from brazbot.voiceclient import VoiceClient
 from brazbot.channels import VoiceChannel
+from brazbot.utils import create_error_embed
 
 MY_GUILD = "1130837584742977697"
 
@@ -305,5 +827,4 @@ async def main():
 
 # Run the bot asynchronously
 asyncio.run(main())
-
 

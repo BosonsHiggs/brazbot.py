@@ -65,6 +65,121 @@ Here's an example of how to create a simple bot using Brazbot.
    python bot.py
    ```
 
+## Voice package
+
+Here's a comprehensive guide on how to install `pynacl` and `ffmpeg` on Linux, Windows, and macOS.
+
+### Installing `pynacl` and `ffmpeg`
+
+#### Linux
+
+**1. Install `pynacl`:**
+
+Open your terminal and run:
+```sh
+pip install pynacl
+```
+
+**2. Install `ffmpeg`:**
+
+For Debian-based systems (like Ubuntu):
+```sh
+sudo apt update
+sudo apt install ffmpeg
+```
+
+For Red Hat-based systems (like Fedora):
+```sh
+sudo dnf install ffmpeg
+```
+
+For Arch Linux:
+```sh
+sudo pacman -S ffmpeg
+```
+
+**Verification:**
+
+To verify the installation, run:
+```sh
+python -c "import nacl; print(nacl.__version__)"
+ffmpeg -version
+```
+
+#### Windows
+
+**1. Install `pynacl`:**
+
+Open Command Prompt (or PowerShell) and run:
+```sh
+pip install pynacl
+```
+
+**2. Install `ffmpeg`:**
+
+- Download the latest `ffmpeg` build from the [official website](https://ffmpeg.org/download.html).
+- Extract the downloaded zip file to a desired location.
+- Add the `bin` folder to your system's PATH environment variable:
+  1. Right-click on "This PC" or "Computer" on the Desktop or in File Explorer.
+  2. Click "Properties".
+  3. Click "Advanced system settings".
+  4. Click "Environment Variables".
+  5. In the "System variables" section, find the `Path` variable and click "Edit".
+  6. Click "New" and add the path to the `bin` folder of the extracted `ffmpeg`.
+
+**Verification:**
+
+To verify the installation, run:
+```sh
+python -c "import nacl; print(nacl.__version__)"
+ffmpeg -version
+```
+
+#### macOS
+
+**1. Install `pynacl`:**
+
+Open Terminal and run:
+```sh
+pip install pynacl
+```
+
+**2. Install `ffmpeg`:**
+
+You can use Homebrew to install `ffmpeg`. If you don't have Homebrew installed, first install it by running:
+```sh
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+Then, install `ffmpeg`:
+```sh
+brew install ffmpeg
+```
+
+**Verification:**
+
+To verify the installation, run:
+```sh
+python -c "import nacl; print(nacl.__version__)"
+ffmpeg -version
+```
+
+### Troubleshooting
+
+If you encounter any issues, here are a few tips:
+
+- Ensure that Python and pip are installed and up-to-date.
+- Make sure that the PATH variable is correctly set, especially on Windows.
+- If you face permission issues on Linux or macOS, you might need to use `sudo` for some commands.
+
+### References
+- [PyNaCl Documentation](https://pynacl.readthedocs.io/en/stable/)
+- [FFmpeg Documentation](https://ffmpeg.org/documentation.html)
+- [Homebrew](https://brew.sh/)
+- [FFmpeg Downloads](https://ffmpeg.org/download.html)
+
+This guide should help you get `pynacl` and `ffmpeg` up and running on your system. If you need further assistance, refer to the respective documentation or seek help from community forums.
+
 ## Example Usage
 
 Below is a more detailed example demonstrating various features of the Brazbot library.

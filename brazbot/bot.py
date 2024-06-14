@@ -214,7 +214,6 @@ class DiscordBot:
                 'd': message['d']
             }))
         elif message['t'] == 'VOICE_STATE_UPDATE':
-            print(f"\n\n\nmessage['d']: {message['d']}\n\n\n")
             if 'endpoint' in message['d']:
                 self.voice_server_endpoint = message['d']['endpoint']
             asyncio.create_task(self.event_handler.handle_event({
