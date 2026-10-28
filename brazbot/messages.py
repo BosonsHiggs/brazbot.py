@@ -1,52 +1,106 @@
-import aiohttp
+"""
+Modelos de Mensagem (`Message`, `PartialMessage`) e re-exportação de `MessageHandler` para compatibilidade.
+"""
 
-class MessageHandler:
-    def __init__(self, token):
-        self.base_url = "https://discord.com/api/v10"
-        self.token = token
-        self.headers = {
-            "Authorization": f"Bot {self.token}",
-            "Content-Type": "application/json"
-        }
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
-    async def send_message(self, channel_id, content):
-        url = f"{self.base_url}/channels/{channel_id}/messages"
-        payload = {
-            "content": content
-        }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=self.headers, json=payload) as response:
-                if response.status != 200:
-                    print(f"Failed to send message: {response.status}")
-                return await response.json()
+from brazbot.message_handler import MessageHandler
+from brazbot.snowflake import Snowflake
 
-    async def send_embed(self, channel_id, embed):
-        url = f"{self.base_url}/channels/{channel_id}/messages"
-        payload = {
-            "embeds": [embed]
-        }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=self.headers, json=payload) as response:
-                if response.status != 200:
-                    print(f"Failed to send embed: {response.status}")
-                return await response.json()
 
-    async def send_file(self, channel_id, file_path, content=None):
-        url = f"{self.base_url}/channels/{channel_id}/messages"
-        data = aiohttp.FormData()
-        if content:
-            data.add_field('content', content)
-        data.add_field('file', open(file_path, 'rb'))
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers={"Authorization": f"Bot {self.token}"}, data=data) as response:
-                if response.status != 200:
-                    print(f"Failed to send file: {response.status}")
-                return await response.json()
+class PartialMessage:
+    """Representa uma referência leve a uma mensagem sem precisar buscá-la antes na API."""
 
-    async def send_image(self, channel_id, image_url, content=None):
-        embed = {
-            "image": {
-                "url": image_url
-            }
-        }
-        return await self.send_embed(channel_id, embed)
+    def __init__(self, channel: Any, id: str):
+        self.channel = channel
+        self.channel_id = str(getattr(channel, "id", channel))
+        self.id = str(id)
+        self.bot = getattr(channel, "bot", None)
+
+    async def fetch(self) -> "Message":
+        data = await self.bot.http.request(
+            "GET", f"/channels/{self.channel_id}/messages/{self.id}"
+        )
+        return Message(data, bot=self.bot)
+
+    async def edit(self, content: Optional[str] = None, **kwargs: Any) -> Optional[Dict[str, Any]]:
+        return await self.bot.message_handler.edit_message(
+            self.channel_id, self.id, content=content, **kwargs
+        )
+
+    async def delete(self, reason: Optional[str] = None) -> bool:
+        return await self.bot.message_handler.delete_message(
+            self.channel_id, self.id, reason=reason
+        )
+
+    async def pin(self, reason: Optional[str] = None) -> bool:
+        return await self.bot.message_handler.pin_message(
+            self.channel_id, self.id, reason=reason
+        )
+
+    async def unpin(self, reason: Optional[str] = None) -> bool:
+        return await self.bot.message_handler.unpin_message(
+            self.channel_id, self.id, reason=reason
+        )
+
+    async def add_reaction(self, emoji: str) -> bool:
+        return await self.bot.message_handler.add_reaction(self.channel_id, self.id, emoji)
+
+
+class Message(PartialMessage):
+    """Representa uma Mensagem completa da API v10 do Discord."""
+
+    def __init__(self, data: Dict[str, Any], bot: Any = None):
+        self._raw = data or {}
+        self.bot = bot
+        self.id = str(data.get("id") or "0")
+        self.channel_id = str(data.get("channel_id") or "0")
+        self.guild_id = str(data.get("guild_id") or "") or None
+        self.author = data.get("author") or {}
+        self.member = data.get("member") or {}
+        self.content = data.get("content", "")
+        self.timestamp = data.get("timestamp")
+        self.edited_timestamp = data.get("edited_timestamp")
+        self.tts = bool(data.get("tts", False))
+        self.mention_everyone = bool(data.get("mention_everyone", False))
+        self.mentions = data.get("mentions", [])
+        self.mention_roles = data.get("mention_roles", [])
+        self.attachments = data.get("attachments", [])
+        self.embeds = data.get("embeds", [])
+        self.reactions = data.get("reactions", [])
+        self.pinned = bool(data.get("pinned", False))
+        self.webhook_id = data.get("webhook_id")
+        self.type = int(data.get("type") or 0)
+        self.flags = int(data.get("flags") or 0)
+        self.components = data.get("components", [])
+        self.poll = data.get("poll")
+        self.created_at = (
+            Snowflake.to_datetime(self.id)
+            if Snowflake.is_valid(self.id)
+            else datetime.now(timezone.utc)
+        )
+        self.jump_url = (
+            f"https://discord.com/channels/{self.guild_id or '@me'}/{self.channel_id}/{self.id}"
+        )
+
+    def __getitem__(self, key: str) -> Any:
+        if key in self._raw:
+            return self._raw[key]
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(key)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    async def reply(self, content: Optional[str] = None, **kwargs: Any) -> Optional[Dict[str, Any]]:
+        return await self.bot.message_handler.send_message(
+            self.channel_id, content=content, reply_to=self.id, **kwargs
+        )
+
+
+__all__ = ["MessageHandler", "PartialMessage", "Message"]

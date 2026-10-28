@@ -90,7 +90,7 @@ async def pin_message_command(ctx, message_id: str):
 @bot.command(name="unpin_message", description="Unpins a message")
 @sync_slash_commands(guild_id=MY_GUILD)
 @rate_limit(limit=1, per=60, scope="user")
-async def unpin_message_command(ctx, str, message_id: str):
+async def unpin_message_command(ctx, message_id: str):
     await ctx.defer()
     success = await ctx.bot.message_handler.unpin_message(ctx.channel_id, message_id)
     if success:

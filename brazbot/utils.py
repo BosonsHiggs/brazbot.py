@@ -1,71 +1,81 @@
+"""
+Funções utilitárias para criação rápida de Embeds, IDs únicos, formatação de tempo e paginação.
+"""
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
+from typing import Any, Dict, Generator, Iterable, List, Optional
 
-def create_embed(title, description, color=0x5865F2):
-    """
-    Cria um dicionário de embed para enviar mensagens embutidas no Discord.
 
-    Args:
-        title (str): O título do embed.
-        description (str): A descrição do embed.
-        color (int, opcional): A cor do embed em formato hexadecimal. O padrão é 0x5865F2.
-
-    Returns:
-        dict: O dicionário do embed.
-    """
-    return {
+def create_embed(
+    title: str,
+    description: str,
+    color: int = 0x5865F2,
+    footer: Optional[str] = None,
+    thumbnail: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Cria um dicionário de embed pronto para envio na API do Discord."""
+    embed: Dict[str, Any] = {
         "title": title,
         "description": description,
-        "color": color
+        "color": color,
     }
+    if footer:
+        embed["footer"] = {"text": footer}
+    if thumbnail:
+        embed["thumbnail"] = {"url": thumbnail}
+    return embed
 
-def format_command_response(response_text, is_error=False):
-    """
-    Formata uma resposta de comando com base em se é um erro ou não.
 
-    Args:
-        response_text (str): O texto da resposta.
-        is_error (bool, opcional): Indica se a resposta é um erro. O padrão é False.
+def format_command_response(response_text: str, is_error: bool = False) -> Dict[str, Any]:
+    """Formata uma resposta de comando como embed de sucesso (verde) ou erro (vermelho)."""
+    color = 0xED4245 if is_error else 0x57F287
+    return create_embed("Resposta do Comando", str(response_text), color)
 
-    Returns:
-        dict: O dicionário da resposta formatada.
-    """
-    color = 0xFF0000 if is_error else 0x00FF00
-    return create_embed("Resposta do Comando", response_text, color)
 
-def create_error_embed(error_message):
+def create_error_embed(error_message: str, title: str = "❌ Erro") -> Dict[str, Any]:
+    """Cria um embed padronizado de erro."""
     return {
-        "title": "Error",
-        "description": error_message,
-        "color": 0xFF0000  # Red color for errors
+        "title": title,
+        "description": str(error_message),
+        "color": 0xED4245,
     }
 
-def generate_unique_id(max_length=8):
-    """
-    Generates a unique integer ID of the specified length.
 
-     Args:
-     max_length (int, optional): The maximum length desired for the ID.
-     The default value is 8.
+def create_success_embed(message: str, title: str = "✅ Sucesso") -> Dict[str, Any]:
+    """Cria um embed padronizado de sucesso."""
+    return {
+        "title": title,
+        "description": str(message),
+        "color": 0x57F287,
+    }
 
-     Returns:
-     int: A unique integer ID with the specified length.
-    """
-    # Gerar um UUID
+
+def generate_unique_id(max_length: int = 8) -> int:
+    """Gera um ID inteiro pseudoaleatório único com base em UUID4."""
     unique_id = uuid.uuid4()
-    
-    # Converter o UUID para uma string hexadecimal
-    hex_string = str(unique_id.hex)
-    
-    # Reduzir o tamanho da string hexadecimal para o comprimento especificado
-    shortened_hex = hex_string[:max_length]
-    
-    # Converter a string hexadecimal encurtada de volta para um inteiro
-    shortened_int = int(shortened_hex, 16)
-    
-    return shortened_int
+    shortened_hex = unique_id.hex[: max(1, min(32, max_length))]
+    return int(shortened_hex, 16)
 
-def generate_list(l:list=None):
-    for n in l:
-        yield n
+
+def generate_list(items: Optional[Iterable[Any]] = None) -> Generator[Any, None, None]:
+    """Gerador simples sobre uma coleção de itens."""
+    if items:
+        for item in items:
+            yield item
+
+
+def format_discord_timestamp(dt: Optional[datetime] = None, style: str = "R") -> str:
+    """
+    Formata um `datetime` na sintaxe nativa de timestamp do Discord (`<t:UNIX:STYLE>`).
+    Estilos: 't' (hora curta), 'T' (hora longa), 'd' (data curta), 'D' (data longa),
+    'f' (data/hora curta), 'F' (data/hora longa), 'R' (relativo).
+    """
+    if dt is None:
+        dt = datetime.now(timezone.utc)
+    return f"<t:{int(dt.timestamp())}:{style}>"
+
+
+def chunk_list(items: List[Any], chunk_size: int = 10) -> List[List[Any]]:
+    """Divide uma lista em páginas/blocos de tamanho `chunk_size`."""
+    return [items[i : i + chunk_size] for i in range(0, len(items), max(1, chunk_size))]
