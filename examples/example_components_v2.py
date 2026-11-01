@@ -1,36 +1,32 @@
 """
-Components v2 & Interactive Views Example — brazbot v2.0.0
-==========================================================
-Demonstrates Discord API v10 Components v2 (`IS_COMPONENTS_V2 = 1 << 15`),
-containers, text displays, media galleries, buttons, and modal dialogs.
+Interactive Buttons, Dropdowns, and Modals Example — brazbot.py v2.0.0
+======================================================================
+Demonstrates interactive message components (`ActionRow`, `Button`, `Dropdown`, `Form`).
 """
 
 import os
-from brazbot import (
-    ActionRow,
-    Button,
-    ButtonStyle,
-    Client,
-    Container,
-    Intents,
-    InteractionContext,
-    Separator,
-    TextDisplay,
-)
+from brazbot import ActionRow, Bot, Button, ButtonStyle, CommandContext, Embed, Intents, View
 
-bot = Client(command_prefix="!", intents=Intents.default(), sync_commands=True)
+bot = Bot(token=os.getenv("DISCORD_TOKEN", ""), command_prefix="!", intents=Intents.default())
 
 
-@bot.slash_command(name="card", description="Render a Discord Components v2 layout card")
-async def slash_card(ctx: InteractionContext):
-    container = Container(
-        TextDisplay("## BrazBot v2.0.0 Components v2"),
-        Separator(),
-        TextDisplay("Native layout containers without legacy embed limits."),
-        accent_color=0x5865F2,
+@bot.command(name="card", description="Sends an interactive message with Buttons")
+async def card_cmd(ctx: CommandContext):
+    view = View(
+        ActionRow(
+            Button(
+                label="GitHub Repository",
+                style=ButtonStyle.LINK,
+                url="https://github.com/BosonsHiggs/brazbot.py",
+            )
+        )
     )
-    row = ActionRow(Button(label="Documentation", style=ButtonStyle.LINK, url="https://github.com/BosonsHiggs/brazbot.py"))
-    await ctx.respond(components=[container.to_dict(), row.to_dict()], flags=1 << 15)
+    embed = Embed(
+        title="BrazBot v2.0.0 Interactive Components",
+        description="Click the button below to visit the official repository.",
+        color=Embed.Color.BLURPLE,
+    )
+    await ctx.send(embed=embed, components=view)
 
 
 if __name__ == "__main__":

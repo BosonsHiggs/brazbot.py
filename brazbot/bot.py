@@ -54,7 +54,10 @@ class DiscordBot:
         num_shards: int = 1,
         shard_id: int = 0,
         compress: bool = False,
+        sync_commands: bool = True,
+        **kwargs: Any,
     ):
+        self.sync_commands_on_ready = bool(sync_commands)
         self.token = token or ""
         self.default_endpoint = "wss://gateway.discord.gg/?v=10"
         self.endpoint = self.default_endpoint
@@ -177,6 +180,16 @@ class DiscordBot:
             return func
 
         return decorator
+
+    def slash_command(
+        self,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        aliases: Optional[List[str]] = None,
+        **kwargs: Any,
+    ) -> Callable[..., Any]:
+        """Alias for `bot.command` to register a hybrid/slash command."""
+        return self.command(name=name, description=description, aliases=aliases, **kwargs)
 
     def user_command(self, name: Optional[str] = None) -> Callable[..., Any]:
         """Registers a User Context Menu command (`type=2` USER)."""
@@ -415,6 +428,16 @@ class DiscordBot:
             self.application_id = d.get("application", {}).get("id") or (
                 self.user.get("id") if self.user else None
             )
+            if (
+                getattr(self, "sync_commands_on_ready", True)
+                or getattr(self, "_sync_slash_commands", False)
+            ) and self.command_handler.commands:
+                sync_gid = getattr(self, "_sync_guild_id", None)
+                if isinstance(sync_gid, list):
+                    for gid in sync_gid:
+                        asyncio.create_task(self.command_handler.sync_commands(guild_id=gid))
+                else:
+                    asyncio.create_task(self.command_handler.sync_commands(guild_id=sync_gid))
             await self.event_handler.handle_event({"t": "on_ready", "d": d})
 
         elif t == "RESUMED":

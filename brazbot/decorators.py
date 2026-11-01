@@ -45,40 +45,58 @@ def tasks(seconds: float = 120.0, run_immediately: bool = False) -> Callable[...
 
 
 def sync_slash_commands(
-    guild_id: Optional[Union[str, List[str]]] = None,
+    target_or_guild_id: Optional[Union[str, List[str], Callable[..., Any], type]] = None,
     force_on_invoke: bool = False,
-) -> Callable[..., Any]:
+    *,
+    guild_id: Optional[Union[str, List[str]]] = None,
+) -> Any:
     """
-    Marks a command for Slash Command synchronization (Global, Single Guild, or List of Guilds).
-    By default, commands are synced on startup (`on_ready` / `setup_hook`) to avoid hitting rate limits
-    on every command invocation.
+    Marks a Bot class or command function for Slash Command synchronization (Global, Single Guild, or List of Guilds).
+    Supports all invocation styles:
+    - `@sync_slash_commands` (on a Bot subclass or command function, without parentheses)
+    - `@sync_slash_commands()` (with empty parentheses)
+    - `@sync_slash_commands("GUILD_ID")` or `@sync_slash_commands(guild_id="GUILD_ID")`
     """
+    resolved_guild_id: Optional[Union[str, List[str]]] = guild_id
+    direct_target: Optional[Any] = None
 
-    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-        @functools.wraps(func)
+    if isinstance(target_or_guild_id, type) or callable(target_or_guild_id):
+        direct_target = target_or_guild_id
+    elif target_or_guild_id is not None and resolved_guild_id is None:
+        resolved_guild_id = target_or_guild_id
+
+    def decorator(obj: Any) -> Any:
+        # Case 1: Decorating a Bot class (e.g. `@sync_slash_commands class ModerationBot(Bot):`)
+        if isinstance(obj, type):
+            obj._sync_slash_commands = True
+            obj._sync_guild_id = resolved_guild_id
+            return obj
+
+        # Case 2: Decorating a command coroutine function
+        @functools.wraps(obj)
         async def wrapper(ctx: Any, *args: Any, **kwargs: Any) -> Any:
-            result = await func(ctx, *args, **kwargs)
+            result = await obj(ctx, *args, **kwargs)
 
-            should_sync = force_on_invoke or getattr(func, "__name__", "").startswith("sync")
+            should_sync = force_on_invoke or getattr(obj, "__name__", "").startswith("sync")
             if not should_sync:
                 return result
 
-            if guild_id is None:
+            if resolved_guild_id is None:
                 if "GLOBAL" not in _SYNCED_TARGETS or force_on_invoke:
                     try:
                         await ctx.bot.command_handler.sync_commands()
                         _SYNCED_TARGETS.add("GLOBAL")
                     except Exception as e:
                         logger.error(f"Global command sync error: {e}")
-            elif isinstance(guild_id, str):
-                if guild_id not in _SYNCED_TARGETS or force_on_invoke:
+            elif isinstance(resolved_guild_id, str):
+                if resolved_guild_id not in _SYNCED_TARGETS or force_on_invoke:
                     try:
-                        await ctx.bot.command_handler.sync_commands(guild_id=guild_id)
-                        _SYNCED_TARGETS.add(guild_id)
+                        await ctx.bot.command_handler.sync_commands(guild_id=resolved_guild_id)
+                        _SYNCED_TARGETS.add(resolved_guild_id)
                     except Exception as e:
-                        logger.error(f"Error syncing commands in guild {guild_id}: {e}")
-            elif isinstance(guild_id, list):
-                for gid in guild_id:
+                        logger.error(f"Error syncing commands in guild {resolved_guild_id}: {e}")
+            elif isinstance(resolved_guild_id, list):
+                for gid in resolved_guild_id:
                     if gid not in _SYNCED_TARGETS or force_on_invoke:
                         try:
                             await ctx.bot.command_handler.sync_commands(guild_id=gid)
@@ -88,9 +106,11 @@ def sync_slash_commands(
             return result
 
         wrapper._slash_command = True  # type: ignore[attr-defined]
-        wrapper._guild_id = guild_id  # type: ignore[attr-defined]
+        wrapper._guild_id = resolved_guild_id  # type: ignore[attr-defined]
         return wrapper
 
+    if direct_target is not None:
+        return decorator(direct_target)
     return decorator
 
 

@@ -1,29 +1,39 @@
 """
-Basic Bot Example — brazbot v2.0.0
-==================================
-Demonstrates prefix commands, slash commands, embeds, and Gateway v10 events.
+Basic Bot Example — brazbot.py v2.0.0
+=====================================
+Demonstrates hybrid prefix (`!`) and slash (`/`) commands, embeds, and Gateway v10 events.
 """
 
 import os
-from brazbot import Client, CommandContext, Embed, Intents, InteractionContext
+from brazbot import Bot, CommandContext, Embed, Intents
 
-bot = Client(command_prefix="!", intents=Intents.default() | Intents.MESSAGE_CONTENT, sync_commands=True)
+bot = Bot(
+    token=os.getenv("DISCORD_TOKEN", ""),
+    command_prefix="!",
+    intents=Intents.default() | Intents.MESSAGE_CONTENT,
+)
 
 
 @bot.event
-async def on_ready():
-    print(f"Bot online as {bot.user}")
+async def on_ready(data):
+    user = data.get("user", {}) if isinstance(data, dict) else {}
+    print(f"Bot online as {user.get('username')}")
 
 
-@bot.command(name="ping", description="Check gateway and REST latency")
+@bot.command(name="ping", description="Checks Gateway latency")
 async def ping_cmd(ctx: CommandContext):
-    await ctx.reply("Pong! BrazBot v2.0.0 is online.")
+    ms = round(bot.latency * 1000, 1)
+    await ctx.reply(f"Pong! Gateway latency: `{ms} ms`")
 
 
-@bot.slash_command(name="hello", description="Greet the user via a Discord API v10 Slash Command")
-async def slash_hello(ctx: InteractionContext):
-    embed = Embed(title="Hello!", description=f"Welcome to **brazbot v2.0.0**, <@{ctx.author.id}>!", color=0x5865F2)
-    await ctx.respond(embed=embed)
+@bot.command(name="hello", description="Greets the user via a Discord API v10 Embed")
+async def hello_cmd(ctx: CommandContext):
+    embed = Embed(
+        title="Hello!",
+        description=f"Welcome to **brazbot.py v2.0.0**, {ctx.author.mention if ctx.author else 'friend'}!",
+        color=Embed.Color.BLURPLE,
+    )
+    await ctx.send(embed=embed)
 
 
 if __name__ == "__main__":

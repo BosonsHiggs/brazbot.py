@@ -1,29 +1,28 @@
 """
-Polls & AutoMod v10 Example — brazbot v2.0.0
-============================================
+Polls & AutoMod v10 Example — brazbot.py v2.0.0
+===============================================
 Demonstrates creating native Discord Polls and AutoMod rules via Discord API v10.
 """
 
 import os
-from brazbot import AutoModRule, Client, Intents, InteractionContext, Poll, PollMedia
+from brazbot import AutoModRule, Bot, CommandContext, Intents, Poll
 
-bot = Client(command_prefix="!", intents=Intents.default(), sync_commands=True)
+bot = Bot(token=os.getenv("DISCORD_TOKEN", ""), command_prefix="!", intents=Intents.default())
 
 
-@bot.slash_command(name="poll", description="Create a native Discord poll")
-async def slash_poll(ctx: InteractionContext):
+@bot.command(name="poll_demo", description="Creates a native Discord API v10 poll")
+async def poll_demo_cmd(ctx: CommandContext):
     poll = Poll(
-        question=PollMedia(text="Which Discord API v10 feature is your favorite?"),
+        question="Which Discord API v10 feature is your favorite?",
         answers=[
-            PollMedia(text="Voice Gateway v8 AEAD"),
-            PollMedia(text="Components v2"),
-            PollMedia(text="Bulk Ban & AutoMod"),
+            "Voice Gateway v8 AEAD",
+            "BatchDeleteQueue Anti-Flood",
+            "Bulk Ban & AutoMod v10",
         ],
-        duration=24,
+        duration_hours=24,
         allow_multiselect=False,
     )
-    await bot._http.send_message(ctx.channel_id, poll=poll.to_dict())
-    await ctx.respond("Poll created!", ephemeral=True)
+    await ctx.send(poll=poll)
 
 
 if __name__ == "__main__":

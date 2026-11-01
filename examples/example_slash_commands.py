@@ -1,22 +1,19 @@
 """
-Slash Commands Example — brazbot v2.0.0
-=======================================
-Demonstrates application commands with typed options, choices, and autocomplete.
+Slash Commands Example — brazbot.py v2.0.0
+==========================================
+Demonstrates hybrid/slash commands with typed options and descriptions.
 """
 
 import os
-from brazbot import ApplicationCommandOption, Client, Intents, InteractionContext
+from brazbot import Bot, CommandContext, Intents, describe
 
-bot = Client(command_prefix="!", intents=Intents.default(), sync_commands=True)
+bot = Bot(token=os.getenv("DISCORD_TOKEN", ""), command_prefix="!", intents=Intents.default())
 
 
-@bot.slash_command(
-    name="echo",
-    description="Repeat a text message",
-    options=[ApplicationCommandOption(name="text", description="Text to repeat", type=3, required=True)],
-)
-async def slash_echo(ctx: InteractionContext, text: str):
-    await ctx.respond(f"You said: {text}")
+@bot.command(name="echo", description="Repeats a text message")
+@describe(text="Text to repeat")
+async def slash_echo(ctx: CommandContext, text: str):
+    await ctx.send(f"You said: {text}")
 
 
 if __name__ == "__main__":

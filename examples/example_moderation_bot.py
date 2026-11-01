@@ -54,11 +54,9 @@ from brazbot import (
     create_error_embed,
     describe,
     has_permissions,
-    sync_slash_commands,
 )
 
 
-@sync_slash_commands
 class ModerationBot(Bot):
     """Production Server Moderation Bot powered by brazbot.py v2.0.0."""
 
@@ -96,6 +94,7 @@ class ModerationBot(Bot):
     async def on_ready(self, data: Dict[str, Any]) -> None:
         user = data.get("user", {})
         print(f"[ModerationBot] Online as {user.get('username')} (ID: {user.get('id')})")
+        await self.command_handler.sync_commands()
         print(
             f"[ModerationBot] Anti-Flood ({self.moderation.antiflood.config.max_messages} msgs/"
             f"{self.moderation.antiflood.config.window_seconds}s) + ProfanityFilter "

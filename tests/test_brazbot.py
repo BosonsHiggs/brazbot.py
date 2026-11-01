@@ -141,5 +141,35 @@ class TestModerationTools(unittest.TestCase):
         self.assertEqual(len(bulk_calls[0][1]), 25)
 
 
+
+    def test_sync_slash_commands_on_class_and_moderation_bot(self):
+        """Verify @sync_slash_commands works on Bot classes (with and without parens) and ModerationBot registers all 22 commands."""
+        from brazbot import Bot, sync_slash_commands
+        import example_moderation_bot
+
+        @sync_slash_commands
+        class SubBotNoParens(Bot):
+            pass
+
+        @sync_slash_commands(guild_id="123456")
+        class SubBotWithArgs(Bot):
+            pass
+
+        b1 = SubBotNoParens(token="dummy_token")
+        self.assertTrue(isinstance(b1, Bot))
+        self.assertTrue(getattr(b1, "_sync_slash_commands", False))
+
+        b2 = SubBotWithArgs(token="dummy_token")
+        self.assertTrue(isinstance(b2, Bot))
+        self.assertEqual(getattr(b2, "_sync_guild_id", None), "123456")
+
+        mod_bot = example_moderation_bot.ModerationBot(token="dummy_token")
+        example_moderation_bot.register_moderation_commands(mod_bot)
+        self.assertGreaterEqual(len(mod_bot.command_handler.commands), 20)
+        self.assertIn("purge", mod_bot.command_handler.commands)
+        self.assertIn("clean_all", mod_bot.command_handler.commands)
+        self.assertIn("massban", mod_bot.command_handler.commands)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,18 +1,19 @@
 """
-Gateway Sharding Example — brazbot v2.0.0
-=========================================
-Demonstrates running a multi-shard Discord bot via `ShardManager`.
+Gateway Sharding Example — brazbot.py v2.0.0
+============================================
+Demonstrates running a sharded Discord bot instance via `num_shards` and `shard_id`.
 """
 
-import asyncio
 import os
-from brazbot import Intents, ShardManager
+from brazbot import Bot, Intents
 
-
-async def main():
-    manager = ShardManager(token=os.environ["DISCORD_TOKEN"], intents=Intents.default(), shard_count=2)
-    await manager.start()
-
+bot = Bot(
+    token=os.getenv("DISCORD_TOKEN", ""),
+    command_prefix="!",
+    intents=Intents.default(),
+    num_shards=2,
+    shard_id=0,
+)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    bot.run(os.environ["DISCORD_TOKEN"])
