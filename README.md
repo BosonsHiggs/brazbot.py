@@ -2,10 +2,10 @@
 
 **Production-ready native Python library for Discord API v10 and Voice Gateway v8 — built from scratch with zero third-party Discord library dependencies.**
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
-[![Discord API v10](https://img.shields.io/badge/Discord%20API-v10-5865F2.svg)](https://discord.com/developers/docs/reference)
-[![Voice Gateway v8](https://img.shields.io/badge/Voice%20Gateway-v8-success.svg)](https://discord.com/developers/docs/topics/voice-connections)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[](https://www.python.org/)
+[Discord API v10](https://www.google.com/search?q=https://discord.com/developers/docs/reference)
+[](https://discord.com/developers/docs/topics/voice-connections)
+[](https://opensource.org/licenses/MIT)
 
 ---
 
@@ -35,13 +35,25 @@
 
 ## Installation
 
+Install directly from the official GitHub repository via `pip`:
+
 ```bash
-pip install .
+pip install git+https://github.com/BosonsHiggs/brazbot.py.git
 ```
 
-Or install in editable development mode:
+Or install with optional high-performance extras (`aiodns`, `Brotli`, `PyNaCl`) directly from GitHub:
 
 ```bash
+pip install "brazbot[speed] @ git+https://github.com/BosonsHiggs/brazbot.py.git"
+```
+
+You can also clone the repository and install locally or in editable development mode:
+
+```bash
+git clone https://github.com/BosonsHiggs/brazbot.py.git
+cd brazbot.py
+pip install .
+# or for development:
 pip install -e ".[speed,dev]"
 ```
 
@@ -89,7 +101,7 @@ bot.run(os.environ["DISCORD_TOKEN"])
 
 ## Full Server Moderation Example (Anti-Flood, Bulk Delete & Profanity Filter)
 
-See [`example_moderation_bot.py`](example_moderation_bot.py) for a complete moderation bot featuring:
+See [example\_moderation\_bot.py](https://www.google.com/search?q=example_moderation_bot.py) for a complete moderation bot featuring:
 - **Automatic flood removal** via `AntiFloodManager` + `BatchDeleteQueue` (deletes up to 100 flood messages in a single `bulk-delete` HTTP request).
 - **Bulk message removal & full-channel wipe** (`/purge`, `/purge_user`, `/clean_all`) without forcing the API with individual `DELETE` calls.
 - **Anti-evasion obscene word filter** (`ProfanityFilter`) with leetspeak/accent normalization and native Discord AutoMod v10 synchronization (`/automod_sync`).
@@ -149,4 +161,4 @@ python3 -m unittest discover -s tests
 
 ## License
 
-Released under the [MIT License](LICENSE).
+Released under the [MIT License](https://www.google.com/search?q=LICENSE).
