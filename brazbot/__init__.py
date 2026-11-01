@@ -1,6 +1,6 @@
 """
-brazbot.py — Biblioteca brasileira nativa e assíncrona para criação de bots na API v10 e Voice Gateway v8 do Discord.
-Repositório oficial: https://github.com/BosonsHiggs/brazbot.py
+brazbot.py — Universal, native, asynchronous Python library for building bots on Discord API v10 and Voice Gateway v8.
+Official repository: https://github.com/BosonsHiggs/brazbot.py
 """
 
 from brazbot.attachments import Attachment
@@ -12,6 +12,7 @@ from brazbot.automod import (
     AutoModTriggerType,
 )
 from brazbot.bot import Bot, DiscordBot
+Client = Bot
 from brazbot.buttons import ActionRow, Button, ButtonStyle, View
 from brazbot.cache import Cache
 from brazbot.channels import (
@@ -84,8 +85,16 @@ from brazbot.http import API_VERSION, BASE_URL, HTTPClient, LIBRARY_VERSION, USE
 from brazbot.member import Member, VoiceState
 from brazbot.message_handler import MessageHandler
 from brazbot.messages import Message, PartialMessage
+from brazbot.moderation import (
+    AntiFloodManager,
+    BatchDeleteQueue,
+    FloodConfig,
+    ModerationGuard,
+    ProfanityFilter,
+)
 from brazbot.music import AUDIO_FILTERS, GuildMusicPlayer, Track, YTDLSource
 from brazbot.permissions import INTENTS, Intents, Permissions
+Permission = Permissions
 from brazbot.polls import Poll, PollAnswer, PollMedia
 from brazbot.responses import InteractionResponse
 from brazbot.roles import Role
@@ -131,6 +140,7 @@ __all__ = [
     "BASE_URL",
     "USER_AGENT",
     "Bot",
+    "Client",
     "DiscordBot",
     "HTTPClient",
     "Cache",
@@ -138,6 +148,7 @@ __all__ = [
     "Intents",
     "INTENTS",
     "Permissions",
+    "Permission",
     "CommandContext",
     "CommandHandler",
     "command",
@@ -166,6 +177,11 @@ __all__ = [
     "Message",
     "PartialMessage",
     "MessageHandler",
+    "BatchDeleteQueue",
+    "ProfanityFilter",
+    "FloodConfig",
+    "AntiFloodManager",
+    "ModerationGuard",
     "Embed",
     "EmbedColor",
     "Button",

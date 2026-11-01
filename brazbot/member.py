@@ -1,7 +1,7 @@
 """
-Modelo de Membro e Estado de Voz (Member & VoiceState) para a API v10 do Discord.
-Suporta acesso via atributos (`member.username`, `member.voice.channel`) e via dicionário
-(`member['id']`, `member.get('username')`) para compatibilidade total.
+Member and VoiceState models for Discord API v10.
+Supports both attribute access (`member.username`, `member.voice.channel`) and dictionary indexing
+(`member['id']`, `member.get('username')`) for full backwards compatibility.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -14,7 +14,7 @@ from brazbot.snowflake import Snowflake
 
 
 class VoiceState:
-    """Representa o estado de voz de um usuário em um servidor (Voice State Object da API v10)."""
+    """Represents a user's voice connection state in a guild (Discord API v10 Voice State Object)."""
 
     def __init__(self, data: Dict[str, Any], bot: Any = None, guild_id: Optional[str] = None):
         self._raw = data or {}
@@ -32,7 +32,7 @@ class VoiceState:
         self.suppress = bool(data.get("suppress", False))
         self.request_to_speak_timestamp = data.get("request_to_speak_timestamp")
 
-        # Cria um objeto VoiceChannel acessível via `member.voice.channel`
+        # Instantiates a VoiceChannel object accessible via `member.voice.channel`
         self.channel: Optional[VoiceChannel] = None
         if self.channel_id:
             ch_data = (
@@ -53,7 +53,7 @@ class VoiceState:
 
 class Member:
     """
-    Representa um Usuário / Membro de Servidor na API v10 do Discord.
+    Represents a Discord User / Guild Member in Discord API v10.
     """
 
     def __init__(
@@ -94,7 +94,11 @@ class Member:
             if Snowflake.is_valid(self.id)
             else datetime.now(timezone.utc)
         )
-        disc_mod = (int(self.id) >> 22) % 6 if self.discriminator in ("0", "0000") and Snowflake.is_valid(self.id) else (int(self.discriminator) % 5 if self.discriminator.isdigit() else 0)
+        disc_mod = (
+            (int(self.id) >> 22) % 6
+            if self.discriminator in ("0", "0000") and Snowflake.is_valid(self.id)
+            else (int(self.discriminator) % 5 if self.discriminator.isdigit() else 0)
+        )
         self.default_avatar = f"https://cdn.discordapp.com/embed/avatars/{disc_mod}.png"
         self.avatar_url = (
             f"https://cdn.discordapp.com/avatars/{self.id}/{self.avatar}.png?size=512"
@@ -143,7 +147,7 @@ class Member:
         )
         self.top_role = self.roles[-1] if self.roles else None
 
-        # Estado de voz (VoiceState)
+        # Voice state resolution
         raw_voice = voice_state or self._raw.get("voice")
         if isinstance(raw_voice, VoiceState):
             self.voice: Optional[VoiceState] = raw_voice if raw_voice.channel_id else None
@@ -154,7 +158,6 @@ class Member:
         else:
             self.voice = None
 
-    # Compatibilidade total com código que acessa `ctx.author['id']` ou `ctx.member['roles']`
     def __getitem__(self, key: str) -> Any:
         if hasattr(self, key):
             return getattr(self, key)
@@ -267,8 +270,8 @@ class Member:
         reason: Optional[str] = None,
     ) -> bool:
         """
-        Aplica ou remove (se `duration=None` ou `0`) um castigo/timeout no membro (API v10).
-        `duration` pode ser `timedelta` ou segundos (`int`/`float`, máximo 28 dias).
+        Applies or removes (if `duration=None` or `0`) a communication timeout on the member (API v10).
+        `duration` can be a `timedelta` or seconds (`int`/`float`, up to 28 days).
         """
         if duration is None or (isinstance(duration, (int, float)) and duration <= 0):
             until_iso = None
@@ -292,7 +295,7 @@ class Member:
         return True
 
     async def untimeout(self, reason: Optional[str] = None) -> bool:
-        """Remove o castigo/timeout ativo do membro."""
+        """Removes an active timeout from the member."""
         return await self.timeout(None, reason=reason)
 
     async def edit(self, reason: Optional[str] = None, **fields: Any) -> "Member":

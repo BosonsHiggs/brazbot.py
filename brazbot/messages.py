@@ -1,16 +1,16 @@
 """
-Modelos de Mensagem (`Message`, `PartialMessage`) e re-exportação de `MessageHandler` para compatibilidade.
+Message models (`Message`, `PartialMessage`) and re-export of `MessageHandler` for compatibility.
 """
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from brazbot.message_handler import MessageHandler
 from brazbot.snowflake import Snowflake
 
 
 class PartialMessage:
-    """Representa uma referência leve a uma mensagem sem precisar buscá-la antes na API."""
+    """Represents a lightweight reference to a message without fetching it from the API first."""
 
     def __init__(self, channel: Any, id: str):
         self.channel = channel
@@ -49,7 +49,7 @@ class PartialMessage:
 
 
 class Message(PartialMessage):
-    """Representa uma Mensagem completa da API v10 do Discord."""
+    """Represents a full Message object in Discord API v10."""
 
     def __init__(self, data: Dict[str, Any], bot: Any = None):
         self._raw = data or {}

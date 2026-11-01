@@ -1,5 +1,5 @@
 """
-Componentes de Botão (`Button`, `ButtonStyle`, `ActionRow`, `View`) da API v10 do Discord.
+Button components (`Button`, `ButtonStyle`, `ActionRow`, `View`) for Discord API v10.
 """
 
 from enum import IntEnum
@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 
 class ButtonStyle(IntEnum):
-    """Estilos oficiais de botões da API v10 do Discord."""
+    """Official button styles for Discord API v10."""
 
     PRIMARY = 1
     BLURPLE = 1
@@ -23,7 +23,7 @@ class ButtonStyle(IntEnum):
 
 class Button:
     """
-    Representa um componente de Botão (Component Type 2) da API v10 do Discord.
+    Represents a Button component (Component Type 2) in Discord API v10.
     """
 
     Style = ButtonStyle
@@ -75,7 +75,7 @@ class Button:
 
 
 class ActionRow:
-    """Agrupa até 5 botões ou 1 menu de seleção em uma linha (Component Type 1)."""
+    """Groups up to 5 buttons or 1 select menu into an Action Row (Component Type 1)."""
 
     def __init__(self, *components: Any):
         self.components = list(components)
@@ -99,8 +99,8 @@ class ActionRow:
 
 class View:
     """
-    Contêiner de múltiplos componentes interativos (Botões e Dropdowns) com suporte
-    a callbacks automáticos registrados no bot.
+    Container for multiple interactive components (Buttons and Select Menus) with automatic
+    callback registration on the bot.
     """
 
     def __init__(self, bot: Any = None, timeout: Optional[float] = 180.0):

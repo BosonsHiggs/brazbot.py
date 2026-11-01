@@ -1,5 +1,5 @@
 """
-Modelo de Cargo (Role) da API v10 do Discord.
+Role model for Discord API v10.
 """
 
 from datetime import datetime, timezone
@@ -10,7 +10,7 @@ from brazbot.snowflake import Snowflake
 
 
 class Role:
-    """Representa um cargo (Role) de um servidor na API v10 do Discord."""
+    """Represents a Guild Role in Discord API v10."""
 
     def __init__(self, data: Dict[str, Any], bot: Any = None, guild_id: Optional[str] = None):
         self._raw = data or {}

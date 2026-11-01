@@ -1,5 +1,5 @@
 """
-Tipo genérico `Greedy[T]` para argumentos variáveis em comandos da biblioteca brazbot.py.
+Generic `Greedy[T]` type for variable-length command arguments in brazbot.py.
 """
 
 from typing import Generic, Iterator, List, TypeVar
@@ -8,7 +8,7 @@ T = TypeVar("T")
 
 
 class Greedy(Generic[T]):
-    """Representa uma lista de argumentos consumidos de forma gulosa em comandos."""
+    """Represents a greedily consumed list of arguments in commands."""
 
     def __init__(self, values: List[T]):
         self.values = list(values)

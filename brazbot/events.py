@@ -1,6 +1,6 @@
 """
-Gerenciador assíncrono de Eventos do Gateway da biblioteca brazbot.py.
-Suporta múltiplos listeners por evento e despacho seguro de corrotinas.
+Asynchronous Gateway Event Handler for the brazbot.py library.
+Supports multiple listeners per event and safe coroutine dispatching.
 """
 
 import asyncio
@@ -12,14 +12,14 @@ logger = logging.getLogger(__name__)
 
 
 class EventHandler:
-    """Registra e despacha eventos do Gateway para um ou mais handlers assíncronos."""
+    """Registers and dispatches Gateway events to one or more asynchronous event handlers."""
 
     def __init__(self, bot: Any = None):
         self.bot = bot
         self.events: Dict[str, List[Callable[..., Any]]] = {}
 
     def register(self, event_name: str, func: Callable[..., Any]) -> Callable[..., Any]:
-        """Registra uma função assíncrona para um evento (ex.: `on_ready`, `on_message_create`)."""
+        """Registers an asynchronous function for an event (e.g., `on_ready`, `on_message_create`)."""
         key = event_name.lower() if event_name.startswith("on_") else event_name
         listeners = self.events.setdefault(key, [])
         if func not in listeners:
@@ -32,7 +32,7 @@ class EventHandler:
             self.events[key].remove(func)
 
     async def handle_event(self, message: Dict[str, Any]) -> None:
-        """Despacha um evento recebido pelo Gateway para todos os handlers registrados."""
+        """Dispatches a Gateway event to all registered listeners."""
         raw_type = message.get("t") or ""
         event_data = message.get("d")
 
@@ -62,4 +62,4 @@ class EventHandler:
                     if asyncio.iscoroutine(res):
                         await res
                 except Exception as e:
-                    logger.error(f"Erro no handler do evento '{key}': {e}", exc_info=True)
+                    logger.error(f"Error in event handler '{key}': {e}", exc_info=True)

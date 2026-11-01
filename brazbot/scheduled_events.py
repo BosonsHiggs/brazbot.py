@@ -1,5 +1,5 @@
 """
-Gerenciamento de Eventos Agendados de Servidor (Guild Scheduled Events) da API v10 do Discord.
+Guild Scheduled Events management for Discord API v10.
 """
 
 from datetime import datetime
@@ -21,7 +21,7 @@ class ScheduledEventStatus(IntEnum):
 
 
 class ScheduledEvent:
-    """Representa um Evento Agendado de Servidor na API v10 do Discord."""
+    """Represents a Guild Scheduled Event in Discord API v10."""
 
     def __init__(self, data: Dict[str, Any], bot: Any = None):
         self._raw = data or {}

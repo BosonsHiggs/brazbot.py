@@ -1,10 +1,10 @@
 """
-Motor completo de Música e Extração de Áudio (`yt-dlp`) nativo da biblioteca brazbot.py.
-Suporta:
-- Extração assíncrona via `yt-dlp` (YouTube, Playlists, SoundCloud, Twitch, links diretos HTTP)
-- Busca inteligente por nome (`ytsearch:`)
-- Fila de reprodução por servidor (GuildMusicPlayer), Loop (off, track, queue), Histórico, Shuffle, Move, Remove, SkipTo
-- Controle real de Volume (0% a 200%), Seek (avançar/retroceder para posição em segundos) e Filtros de Áudio FFmpeg
+Full Music and Audio Extraction Engine (`yt-dlp`) for the brazbot.py library.
+Supports:
+- Asynchronous extraction via `yt-dlp` (YouTube, Playlists, SoundCloud, Twitch, direct HTTP audio links)
+- Smart text search (`ytsearch:`)
+- Per-guild playback queue (`GuildMusicPlayer`), Loop modes (off, track, queue), History, Shuffle, Move, Remove, SkipTo
+- Real-time Volume control (0% to 200%), Seek (jump to timestamp in seconds), and FFmpeg Audio Filters
   (bassboost, nightcore, vaporwave, 8d, treble, karaoke, normal)
 """
 
@@ -13,12 +13,12 @@ import os
 import random
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from brazbot.errors import VoiceConnectionError
 from brazbot.voiceclient import FFmpegAudioSource, VoiceClient
 
-# Presets de filtros de áudio FFmpeg para comandos de música
+# FFmpeg audio filter presets for music commands
 AUDIO_FILTERS: Dict[str, Optional[str]] = {
     "off": None,
     "normal": None,
@@ -47,13 +47,13 @@ YTDL_DEFAULT_OPTIONS: Dict[str, Any] = {
 
 @dataclass
 class Track:
-    """Representa uma faixa de áudio na fila ou em reprodução."""
+    """Represents an audio track in the queue or currently playing."""
 
     title: str
-    url: str  # URL original ou página
-    stream_url: str  # URL direta da stream de áudio para o FFmpeg
+    url: str  # Original webpage or source URL
+    stream_url: str  # Direct audio stream URL for FFmpeg
     requester: str = "Unknown"
-    duration: int = 0  # Duração em segundos (0 = desconhecida/live)
+    duration: int = 0  # Duration in seconds (0 = unknown/live)
     thumbnail: Optional[str] = None
     uploader: Optional[str] = None
     is_live: bool = False
@@ -65,9 +65,9 @@ class Track:
     @property
     def formatted_duration(self) -> str:
         if self.is_live:
-            return "🔴 AO VIVO"
+            return "🔴 LIVE"
         if not self.duration or self.duration <= 0:
-            return "Desconhecida"
+            return "Unknown"
         mins, secs = divmod(int(self.duration), 60)
         hours, mins = divmod(mins, 60)
         if hours > 0:
@@ -111,8 +111,8 @@ class Track:
 
 class YTDLSource:
     """
-    Extrator assíncrono de faixas e pesquisas usando a última versão do `yt-dlp`.
-    Também suporta links diretos para arquivos de áudio (.mp3, .wav, .ogg, .flac, .m4a).
+    Asynchronous track and search extractor powered by the latest `yt-dlp`.
+    Also supports direct links to audio files (.mp3, .wav, .ogg, .flac, .m4a).
     """
 
     DIRECT_EXTENSIONS = (".mp3", ".wav", ".ogg", ".flac", ".m4a", ".opus", ".webm", ".aac")
@@ -132,12 +132,11 @@ class YTDLSource:
         max_playlist_items: int = 50,
     ) -> List[Track]:
         """
-        Extrai uma ou mais faixas a partir de uma URL (YouTube, Playlist, SoundCloud, link direto)
-        ou termo de busca textual.
+        Extracts one or more tracks from a URL (YouTube, Playlist, SoundCloud, direct link)
+        or a text search query.
         """
         query = query.strip()
 
-        # Se for arquivo local existente ou link direto de áudio (.mp3, .wav, etc.)
         if os.path.isfile(query) or cls._is_direct_audio_url(query):
             base = os.path.basename(query.split("?")[0]) or "Audio Track"
             for ext in cls.DIRECT_EXTENSIONS:
@@ -156,13 +155,12 @@ class YTDLSource:
         try:
             import yt_dlp
         except ImportError:
-            # Fallback caso yt-dlp não esteja instalado e seja uma URL direta
             if query.startswith(("http://", "https://")):
                 title = os.path.basename(query.split("?")[0]) or query
                 return [Track(title=title, url=query, stream_url=query, requester=requester)]
             raise VoiceConnectionError(
-                "O pacote 'yt-dlp' é necessário para pesquisar ou reproduzir links do YouTube. "
-                "Instale com: pip install -U yt-dlp"
+                "The 'yt-dlp' package is required to search or stream YouTube links. "
+                "Install it with: pip install -U yt-dlp"
             )
 
         opts = dict(YTDL_DEFAULT_OPTIONS)
@@ -184,7 +182,7 @@ class YTDLSource:
                 continue
             stream_url = entry.get("url") or entry.get("webpage_url") or query
             webpage_url = entry.get("webpage_url") or entry.get("original_url") or query
-            title = entry.get("title") or "Faixa Desconhecida"
+            title = entry.get("title") or "Unknown Track"
             duration = int(entry.get("duration") or 0)
             thumbnail = entry.get("thumbnail")
             uploader = entry.get("uploader") or entry.get("channel")
@@ -205,7 +203,7 @@ class YTDLSource:
 
     @classmethod
     async def search(cls, query: str, limit: int = 5, requester: str = "Unknown") -> List[Track]:
-        """Pesquisa até `limit` resultados no YouTube para seleção ou autocomplete."""
+        """Searches up to `limit` results on YouTube for selection or autocomplete."""
         try:
             import yt_dlp
         except ImportError:
@@ -228,7 +226,7 @@ class YTDLSource:
                 continue
             results.append(
                 Track(
-                    title=entry.get("title") or "Sem título",
+                    title=entry.get("title") or "Untitled",
                     url=entry.get("webpage_url") or entry.get("url") or "",
                     stream_url=entry.get("url") or "",
                     requester=requester,
@@ -243,7 +241,7 @@ class YTDLSource:
 
 class GuildMusicPlayer:
     """
-    Controlador de fila e reprodução de música para um servidor (Guild) específico.
+    Music queue and playback controller for a specific guild.
     """
 
     def __init__(self, bot: Any, guild_id: str):
@@ -271,7 +269,7 @@ class GuildMusicPlayer:
         requester: str = "Unknown",
         title: Optional[str] = None,
     ) -> List[Track]:
-        """Extrai e adiciona uma ou mais faixas à fila; inicia a reprodução se ocioso."""
+        """Extracts and appends one or more tracks to the queue; starts playback if idle."""
         tracks = await YTDLSource.extract_tracks(query, requester=requester)
         if title and len(tracks) == 1:
             tracks[0].title = title
@@ -283,7 +281,7 @@ class GuildMusicPlayer:
         return tracks
 
     async def play_next(self, error: Optional[Exception] = None) -> Optional[Track]:
-        """Avança para a próxima faixa respeitando o modo de loop."""
+        """Advances to the next track in the queue respecting the active loop mode."""
         if self.current:
             if self.loop_mode == "track":
                 self.queue.insert(0, self.current)
@@ -299,7 +297,6 @@ class GuildMusicPlayer:
         next_track.seek_offset = 0.0
         next_track.audio_filter = self.audio_filter
 
-        # Se a stream_url expirou ou estava vazia, re-extrai
         if not next_track.stream_url or next_track.stream_url == next_track.url:
             if not YTDLSource._is_direct_audio_url(next_track.url) and not os.path.isfile(next_track.url):
                 try:
@@ -348,12 +345,11 @@ class GuildMusicPlayer:
         await vc.play(source, after=_after_cb)
 
     async def seek(self, position_seconds: float) -> bool:
-        """Reposiciona a reprodução da faixa atual para `position_seconds`."""
+        """Seeks the currently playing track to `position_seconds`."""
         vc = self.voice_client
         if not vc or not vc.is_connected() or not self.current:
             return False
         track = self.current
-        # Evita disparar play_next durante o restart do seek
         vc._after_callback = None
         await vc.stop()
         self.current = track
@@ -361,7 +357,7 @@ class GuildMusicPlayer:
         return True
 
     async def set_filter(self, filter_name: str) -> bool:
-        """Aplica um filtro de áudio FFmpeg em tempo real."""
+        """Applies a real-time FFmpeg audio filter."""
         key = filter_name.lower().strip()
         if key not in AUDIO_FILTERS:
             return False

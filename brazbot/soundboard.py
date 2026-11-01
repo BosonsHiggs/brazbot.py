@@ -1,12 +1,12 @@
 """
-Suporte ao Soundboard da API v10 do Discord.
+Soundboard support for Discord API v10.
 """
 
 from typing import Any, Dict, List, Optional
 
 
 class SoundboardSound:
-    """Representa um som do Soundboard na API v10 do Discord."""
+    """Represents a Soundboard sound in Discord API v10."""
 
     def __init__(self, data: Dict[str, Any], bot: Any = None):
         self._raw = data or {}
@@ -22,7 +22,7 @@ class SoundboardSound:
 
 
 class Soundboard:
-    """Gerenciador de efeitos sonoros do Soundboard (API v10)."""
+    """Soundboard manager for Discord API v10."""
 
     @staticmethod
     async def list_default_sounds(bot: Any) -> List[SoundboardSound]:

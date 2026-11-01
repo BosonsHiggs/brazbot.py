@@ -1,14 +1,14 @@
 """
-Grupos de Subcomandos (`SubCommandGroup`) compatíveis tanto com comandos de prefixo
-quanto com a árvore de Application Commands (SUB_COMMAND type=1 e SUB_COMMAND_GROUP type=2) da API v10.
+Subcommand Groups (`SubCommandGroup`) compatible with both prefix commands
+and Discord API v10 Application Command trees (SUB_COMMAND type=1 and SUB_COMMAND_GROUP type=2).
 """
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Optional
 
 
 class SubCommandGroup:
     """
-    Representa um grupo ou subgrupo de comandos (ex.: `/fun sorrir alto` ou `!fun sorrir alto`).
+    Represents a command group or subgroup (e.g., `/fun smile loud` or `!fun smile loud`).
     """
 
     def __init__(
@@ -23,7 +23,7 @@ class SubCommandGroup:
         self.parent_group_name = (
             parent_group_name.strip().lower() if parent_group_name else None
         )
-        self.description = description or f"Grupo de comandos {self.group_name}"
+        self.description = description or f"Command group {self.group_name}"
         self.subcommands: Dict[str, Callable[..., Any]] = {}
         self.subgroups: Dict[str, "SubCommandGroup"] = {}
 

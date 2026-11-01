@@ -1,5 +1,5 @@
 """
-Tipos de Eventos do Audit Log da API v10 do Discord.
+Audit Log Event Types for Discord API v10.
 """
 
 from enum import Enum

@@ -1,14 +1,14 @@
 """
-Modelo de Anexo (Attachment) da API v10 do Discord.
+Attachment model for Discord API v10.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import aiohttp
 
 
 class Attachment:
-    """Representa um arquivo anexado em uma mensagem ou comando slash da API v10."""
+    """Represents a file attached to a message or slash command in Discord API v10."""
 
     def __init__(self, attachment_data: Dict[str, Any]):
         self._raw = attachment_data or {}
@@ -26,7 +26,7 @@ class Attachment:
         self.waveform = attachment_data.get("waveform")
 
     async def read(self) -> bytes:
-        """Baixa e retorna os bytes brutos do anexo."""
+        """Downloads and returns the raw bytes of the attachment."""
         async with aiohttp.ClientSession() as session:
             async with session.get(self.url) as response:
                 if response.status == 200:
@@ -34,13 +34,13 @@ class Attachment:
                 raise Exception(f"Failed to download attachment: HTTP {response.status}")
 
     async def save(self, destination_path: str) -> int:
-        """Baixa e salva o anexo em um caminho local no disco."""
+        """Downloads and saves the attachment to a local file path."""
         data = await self.read()
         with open(destination_path, "wb") as fp:
             return fp.write(data)
 
     async def to_file(self) -> Dict[str, Any]:
-        """Baixa o anexo e retorna um dicionário pronto para envio em `files=[...]`."""
+        """Downloads the attachment and returns a dictionary ready for `files=[...]` upload."""
         data = await self.read()
         return {
             "filename": self.filename,

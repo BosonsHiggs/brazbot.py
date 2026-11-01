@@ -1,5 +1,5 @@
 """
-Compatibilidade para `literal_command` e `optional_argument_command`.
+Backwards compatibility helper for `literal_command`.
 """
 
 from typing import Any, Callable, Literal, Optional

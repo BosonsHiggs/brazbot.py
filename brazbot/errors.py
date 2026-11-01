@@ -1,17 +1,17 @@
 """
-Hierarquia de exceções nativas da biblioteca brazbot.py.
+Native exception hierarchy for the brazbot.py library.
 """
 
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 
 class BrazbotError(Exception):
-    """Exceção base para todos os erros da biblioteca brazbot."""
+    """Base exception for all errors raised by the brazbot library."""
     pass
 
 
 class HTTPException(BrazbotError):
-    """Exceção lançada quando uma requisição HTTP para a API do Discord falha."""
+    """Exception raised when an HTTP request to the Discord API fails."""
 
     def __init__(
         self,
@@ -37,27 +37,27 @@ class HTTPException(BrazbotError):
 
 
 class BadRequest(HTTPException):
-    """HTTP 400 - Requisição inválida."""
+    """HTTP 400 - Invalid request payload or parameters."""
     pass
 
 
 class Unauthorized(HTTPException):
-    """HTTP 401 - Token inválido ou não autorizado."""
+    """HTTP 401 - Invalid or unauthorized bot token."""
     pass
 
 
 class Forbidden(HTTPException):
-    """HTTP 403 - Permissão insuficiente na API do Discord."""
+    """HTTP 403 - Insufficient permissions on the Discord API."""
     pass
 
 
 class NotFound(HTTPException):
-    """HTTP 404 - Recurso não encontrado."""
+    """HTTP 404 - Requested Discord resource was not found."""
     pass
 
 
 class RateLimited(HTTPException):
-    """HTTP 429 - Limite de requisições atingido."""
+    """HTTP 429 - Rate limit reached."""
 
     def __init__(self, retry_after: float, is_global: bool = False, scope: str = "shared"):
         self.retry_after = float(retry_after)
@@ -70,12 +70,12 @@ class RateLimited(HTTPException):
 
 
 class DiscordServerError(HTTPException):
-    """HTTP 5xx - Erro interno nos servidores do Discord."""
+    """HTTP 5xx - Internal server error on Discord's infrastructure."""
     pass
 
 
 class GatewayError(BrazbotError):
-    """Erro relacionado à conexão WebSocket do Gateway do Discord."""
+    """Error related to the Discord Gateway WebSocket connection."""
 
     def __init__(self, message: str, close_code: Optional[int] = None):
         self.close_code = close_code
@@ -83,72 +83,72 @@ class GatewayError(BrazbotError):
 
 
 class VoiceConnectionError(BrazbotError):
-    """Erro ao conectar, autenticar ou transmitir áudio no Voice Gateway/UDP."""
+    """Error while connecting, authenticating, or streaming audio over Voice Gateway/UDP."""
     pass
 
 
 class OpusError(VoiceConnectionError):
-    """Erro na codificação ou decodificação de pacotes de áudio Opus."""
+    """Error encoding or decoding Opus audio packets."""
     pass
 
 
 class CommandError(BrazbotError):
-    """Erro base durante o registro ou execução de comandos."""
+    """Base error during command registration or execution."""
     pass
 
 
 class CommandNotFound(CommandError):
-    """Comando não encontrado."""
+    """Requested command was not found."""
     pass
 
 
 class MissingRequiredArgument(CommandError):
-    """Argumento obrigatório ausente na chamada do comando."""
+    """A required command argument was omitted."""
 
     def __init__(self, param_name: str):
         self.param_name = param_name
-        super().__init__(f"O argumento obrigatório '{param_name}' não foi informado.")
+        super().__init__(f"Required argument '{param_name}' is missing.")
 
 
 class BadArgument(CommandError):
-    """Erro de conversão de tipo de argumento."""
+    """Failed to convert or validate a command argument."""
     pass
 
 
 class CheckFailure(CommandError):
-    """Falha em uma verificação de permissão ou restrição de comando."""
+    """A command permission or restriction check failed."""
     pass
 
 
 class MissingPermissions(CheckFailure):
-    """O usuário não possui as permissões necessárias para executar o comando."""
+    """The invoking user lacks the required permissions to run the command."""
 
     def __init__(self, missing_perms: list):
         self.missing_perms = missing_perms
         perms_str = ", ".join(missing_perms)
-        super().__init__(f"Você não possui as permissões necessárias: {perms_str}")
+        super().__init__(f"You are missing required permissions: {perms_str}")
 
 
 class BotMissingPermissions(CheckFailure):
-    """O bot não possui as permissões necessárias para executar a ação."""
+    """The bot lacks the required permissions to perform the action."""
 
     def __init__(self, missing_perms: list):
         self.missing_perms = missing_perms
         perms_str = ", ".join(missing_perms)
-        super().__init__(f"O bot não possui as permissões necessárias: {perms_str}")
+        super().__init__(f"Bot is missing required permissions: {perms_str}")
 
 
 class NotOwner(CheckFailure):
-    """O usuário não é o dono do servidor ou do bot."""
+    """The invoking user is not the guild or bot owner."""
     pass
 
 
 class CooldownError(CommandError):
-    """O comando está em tempo de recarga (rate limit)."""
+    """The command is currently on cooldown (rate limit)."""
 
     def __init__(self, retry_after: float, scope: str = "user"):
         self.retry_after = float(retry_after)
         self.scope = scope
         super().__init__(
-            f"Comando em recarga ({scope}). Tente novamente em {self.retry_after:.2f} segundos."
+            f"Command is on cooldown ({scope}). Try again in {self.retry_after:.2f} seconds."
         )

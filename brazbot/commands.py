@@ -1,5 +1,5 @@
 """
-Motor de Comandos Híbridos (Prefixo + Slash Commands + Context Menus + Autocomplete) da brazbot.py.
+Hybrid Command Engine (Prefix + Slash Commands + Context Menus + Autocomplete) for brazbot.py.
 """
 
 import inspect
@@ -8,8 +8,8 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union, g
 
 from brazbot.attachments import Attachment
 from brazbot.channels import Channel, ForumChannel, StageChannel, TextChannel, VoiceChannel
-from brazbot.guilds import Guild
 from brazbot.greedy_union import Greedy
+from brazbot.guilds import Guild
 from brazbot.member import Member, VoiceState
 from brazbot.roles import Role
 from brazbot.snowflake import Snowflake
@@ -20,8 +20,7 @@ logger = logging.getLogger(__name__)
 
 class CommandContext:
     """
-    Contexto unificado de execução de comando (funciona de forma idêntica para comandos
-    de Prefixo `!cmd`, Slash Commands `/cmd` e Context Menus).
+    Unified command execution context (works identically for Prefix `!cmd`, Slash `/cmd`, and Context Menus).
     """
 
     def __init__(
@@ -48,7 +47,7 @@ class CommandContext:
         ) or None
         self.content: str = self.message.get("content", "")
 
-        # Constrói objetos Member ricos (com `.voice` e suporte a `ctx.author['id']`)
+        # Build rich Member objects (with `.voice` and `ctx.author['id']` compatibility)
         raw_member = (
             (interaction.get("member") if interaction else None)
             or self.message.get("member")
@@ -86,29 +85,29 @@ class CommandContext:
             self.author = None
             self.member = None
 
-        # Extração de opções de Slash Command (incluindo subcomandos)
+        # Extract Slash Command options (including nested subcommands)
         self.options: Dict[str, Any] = {}
         if interaction and "data" in interaction:
             self._extract_options(interaction["data"].get("options", []))
 
     def _extract_options(self, options_list: List[Dict[str, Any]]) -> None:
         for opt in options_list:
-            if opt.get("type") in (1, 2):  # SUB_COMMAND ou SUB_COMMAND_GROUP
+            if opt.get("type") in (1, 2):  # SUB_COMMAND or SUB_COMMAND_GROUP
                 self._extract_options(opt.get("options", []))
             elif "name" in opt and "value" in opt:
                 self.options[opt["name"]] = opt["value"]
 
     @property
     def voice_client(self) -> Any:
-        """Retorna o `VoiceClient` ativo do bot neste servidor, se houver."""
+        """Returns the active `VoiceClient` for this guild, if connected."""
         if self.guild_id and hasattr(self.bot, "voice_clients"):
             return self.bot.voice_clients.get(self.guild_id)
         return None
 
     async def defer(self, ephemeral: bool = False) -> None:
         """
-        Adia a resposta da interação (Type 5 DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE).
-        Em comandos de prefixo, aciona o indicador 'digitando...' no canal.
+        Defers the interaction response (Type 5 DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE).
+        In prefix commands, triggers the 'typing...' indicator in the channel.
         """
         self.deferred = True
         if self.interaction:
@@ -129,7 +128,7 @@ class CommandContext:
             )
 
     async def send_modal(self, title: str, custom_id: str, data: Any) -> Any:
-        """Abre um formulário Modal em resposta à interação."""
+        """Opens a Modal form in response to the interaction."""
         if not self.interaction:
             raise RuntimeError("Modals can only be sent in response to an interaction.")
         self.responded = True
@@ -148,8 +147,8 @@ class CommandContext:
         poll: Any = None,
     ) -> Any:
         """
-        Envia uma mensagem de acompanhamento (follow-up) após `ctx.defer()`.
-        Se o comando foi chamado via prefixo (`!cmd`), envia normalmente para o canal.
+        Sends a follow-up message after `ctx.defer()`.
+        If the command was invoked via prefix (`!cmd`), sends a standard channel message.
         """
         self.responded = True
         if self.interaction:
@@ -200,8 +199,8 @@ class CommandContext:
         poll: Any = None,
     ) -> Any:
         """
-        Método universal de resposta: funciona automaticamente em Slash Commands (com ou sem defer)
-        e em comandos de prefixo.
+        Universal response method: works automatically in Slash Commands (with or without defer)
+        and in Prefix Commands.
         """
         return await self.send_followup_message(
             content=content,
@@ -224,7 +223,7 @@ class CommandContext:
         ephemeral: bool = False,
         poll: Any = None,
     ) -> Any:
-        """Responde ao comando (alias semântico para `ctx.send`)."""
+        """Replies to the command invocation."""
         if not self.interaction and self.channel_id and self.message.get("id"):
             return await self.bot.message_handler.send_message(
                 self.channel_id,
@@ -267,7 +266,7 @@ class CommandContext:
         )
 
     async def get_channel(self, id: Optional[str] = None) -> Channel:
-        """Busca o objeto `Channel` do contexto atual ou pelo ID informado."""
+        """Fetches the `Channel` object for the current context or the specified channel ID."""
         target_id = str(id if id is not None else self.channel_id)
         return await Channel.from_channel_id(self.bot, self.guild_id, target_id)
 
@@ -279,15 +278,15 @@ class CommandContext:
 
 class CommandHandler:
     """
-    Registra, sincroniza e despacha comandos de Prefixo, Slash Commands (`CHAT_INPUT`),
-    Context Menus (`USER` / `MESSAGE`) e Autocomplete na API v10 do Discord.
+    Registers, synchronizes, and dispatches Prefix Commands, Slash Commands (`CHAT_INPUT`),
+    Context Menus (`USER` / `MESSAGE`), and Autocomplete interactions in Discord API v10.
     """
 
     def __init__(self, bot: Any):
         self.bot = bot
         self.commands: Dict[str, Dict[str, Any]] = {}
         self.aliases: Dict[str, str] = {}
-        self.autocomplete_functions: Dict[ tuple, Callable[..., Any] ] = {}
+        self.autocomplete_functions: Dict[Tuple[str, str], Callable[..., Any]] = {}
 
     def _infer_option_schema(
         self, func: Callable[..., Any]
@@ -298,7 +297,6 @@ class CommandHandler:
         annotations = getattr(func, "__annotations__", {})
 
         params = list(sig.parameters.values())
-        # Ignora `self` (se método de Cog) e `ctx` (primeiro parâmetro de contexto)
         start_idx = 0
         if params and params[0].name == "self":
             start_idx = 1
@@ -324,7 +322,7 @@ class CommandHandler:
             origin = get_origin(param)
             args = get_args(param)
 
-            # Desempacota Optional[T] / Union[T, None]
+            # Unwrap Optional[T] / Union[T, None]
             if origin is Union and type(None) in args:
                 option["required"] = False
                 non_none = [a for a in args if a is not type(None)]
@@ -351,7 +349,7 @@ class CommandHandler:
             elif isinstance(param, type) and issubclass(param, Role):
                 option["type"] = 8
             elif isinstance(param, type) and issubclass(param, Guild):
-                option["type"] = 3  # Guild ID ou resolvido do contexto
+                option["type"] = 3
                 option["required"] = False
             elif isinstance(param, type) and issubclass(param, Thread):
                 option["type"] = 7
@@ -385,11 +383,11 @@ class CommandHandler:
             if hasattr(func, "parameter_descriptions") and param_name in func.parameter_descriptions:
                 option["description"] = str(func.parameter_descriptions[param_name])[:100]
             else:
-                option["description"] = f"Parâmetro {param_name}"[:100]
+                option["description"] = f"Parameter {param_name}"[:100]
 
             options.append(option)
 
-        # Discord exige que opções required=True venham antes das required=False
+        # Discord requires `required=True` options to appear before `required=False` options
         options.sort(key=lambda o: not o.get("required", False))
         return options, param_types
 
@@ -424,7 +422,7 @@ class CommandHandler:
         for alias in aliases or []:
             self.aliases[alias.lower()] = cmd_name
 
-        logger.debug(f"Comando registrado: '{cmd_name}' (type={cmd_type}, options={len(options)})")
+        logger.debug(f"Registered command: '{cmd_name}' (type={cmd_type}, options={len(options)})")
 
     def register_autocomplete(
         self,
@@ -433,7 +431,6 @@ class CommandHandler:
         option_name: Optional[str] = None,
     ) -> None:
         if option_name is None:
-            # Chamado via autocomplete_command
             option_name = command_name
             for cname, cdata in self.commands.items():
                 for opt in cdata["options"]:
@@ -477,7 +474,7 @@ class CommandHandler:
                 await handler(interaction)
             else:
                 logger.warning(
-                    f"Nenhuma função de autocomplete registrada para ({command_name}, {option_name})"
+                    f"No autocomplete function registered for ({command_name}, {option_name})"
                 )
 
     async def _resolve_slash_arguments(
@@ -507,7 +504,6 @@ class CommandHandler:
 
             if origin is Greedy:
                 raw_parts = str(opt_val).replace(",", " ").split()
-                inner_args = get_args(expected_type)
                 conv_list: List[Any] = []
                 for p in raw_parts:
                     try:
@@ -550,7 +546,6 @@ class CommandHandler:
             else:
                 args[opt_name] = opt_val
 
-        # Se o comando espera `guild: Guild` e o usuário não precisou informar como opção:
         for p_name, p_type in param_types.items():
             if p_name not in args and isinstance(p_type, type) and issubclass(p_type, Guild) and ctx.guild_id:
                 args[p_name] = await Guild.from_guild_id(self.bot, ctx.guild_id)
@@ -560,9 +555,8 @@ class CommandHandler:
     async def handle_command(self, message: Dict[str, Any]) -> None:
         d = message.get("d", message)
 
-        # 1. Comandos por Prefixo (MESSAGE_CREATE)
+        # 1. Prefix Commands (MESSAGE_CREATE)
         if "content" in d and "type" not in d.get("data", {}):
-            # Ignora mensagens de bots
             if d.get("author", {}).get("bot"):
                 return
             content = d.get("content", "")
@@ -573,7 +567,6 @@ class CommandHandler:
                     return
                 parts = without_prefix.split()
 
-                # Verifica correspondência com subcomandos (3, 2 ou 1 palavras)
                 matched_cmd = None
                 cmd_args: List[str] = []
                 for length in (3, 2, 1):
@@ -597,7 +590,6 @@ class CommandHandler:
             options = data.get("options", [])
             resolved_data = data.get("resolved", {})
 
-            # Verifica se é um subcomando na árvore Slash
             lookup_path = [command_name.lower()]
             curr_opts = options
             while curr_opts and curr_opts[0].get("type") in (1, 2):
@@ -624,7 +616,7 @@ class CommandHandler:
             await self.handle_autocomplete(d)
 
     def _build_slash_command_payloads(self) -> List[Dict[str, Any]]:
-        """Constrói o payload de Application Commands da API v10 (incluindo grupos de subcomandos)."""
+        """Builds Discord API v10 Application Command payloads (including subcommand groups)."""
         payloads: List[Dict[str, Any]] = []
         root_groups: Dict[str, Dict[str, Any]] = {}
 
@@ -636,7 +628,7 @@ class CommandHandler:
                     root_name,
                     {
                         "name": root_name,
-                        "description": f"Grupo de comandos {root_name}",
+                        "description": f"Command group {root_name}",
                         "type": 1,
                         "options": [],
                     },
@@ -663,7 +655,7 @@ class CommandHandler:
                     if not sub_group:
                         sub_group = {
                             "name": sub_group_name,
-                            "description": f"Subgrupo {sub_group_name}",
+                            "description": f"Subgroup {sub_group_name}",
                             "type": 2,  # SUB_COMMAND_GROUP
                             "options": [],
                         }
@@ -701,7 +693,7 @@ class CommandHandler:
         return {}
 
     async def sync_commands(self, guild_id: Optional[str] = None) -> str:
-        """Sincroniza de forma inteligente a árvore de Slash Commands com a API v10 do Discord."""
+        """Intelligently synchronizes the Slash Command tree with Discord API v10."""
         try:
             if not Snowflake.is_valid(self.bot.application_id):
                 raise ValueError(f"Invalid application_id: {self.bot.application_id}")
@@ -737,15 +729,15 @@ class CommandHandler:
                 )
                 if res is not None:
                     logger.info(
-                        f"Comandos Slash sincronizados com sucesso ({'guild ' + str(guild_id) if guild_id else 'global'})."
+                        f"Slash commands synced successfully ({'guild ' + str(guild_id) if guild_id else 'global'})."
                     )
                     return f"Commands synced successfully: {len(current_commands)} commands"
                 return "Failed to sync commands"
             else:
-                logger.info("Nenhuma alteração nos comandos Slash. Sincronização ignorada.")
+                logger.info("No changes in slash commands. Sync skipped.")
                 return "No changes in commands. Sync skipped."
         except Exception as e:
-            logger.error(f"Exceção ao sincronizar comandos: {e}")
+            logger.error(f"Exception occurred while syncing commands: {e}")
             return f"Exception occurred while syncing commands: {e}"
 
     def commands_changed(
@@ -776,11 +768,10 @@ class CommandHandler:
         return False
 
     async def check_rate_limits(self) -> List[Dict[str, Any]]:
-        """Retorna informações de Rate Limit dos buckets ativos e do Gateway."""
+        """Returns rate-limit bucket metrics from active buckets and the Gateway."""
         snapshot = self.bot.http.get_rate_limit_snapshot()
         if snapshot:
             return snapshot
-        # Caso ainda não tenha havido chamadas, consulta /gateway/bot
         await self.bot.http.request("GET", "/gateway/bot", raise_on_error=False)
         return self.bot.http.get_rate_limit_snapshot()
 
@@ -790,7 +781,7 @@ def command(
     description: Optional[str] = None,
     aliases: Optional[List[str]] = None,
 ) -> Callable[..., Any]:
-    """Decorador standalone exportado em `brazbot.commands` (compatível com README.md)."""
+    """Standalone decorator exported in `brazbot.commands` (compatible with README.md)."""
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         func._command = {  # type: ignore[attr-defined]

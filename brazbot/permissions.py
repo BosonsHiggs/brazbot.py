@@ -1,17 +1,17 @@
 """
-Sistema de Permissões e Intents nativos da API v10 do Discord.
+Native Permissions and Gateway Intents system for Discord API v10.
 """
 
-from typing import Union, List, Dict, Iterable
+from typing import Dict, Iterable, List, Union
 
-# Mapeamento oficial de Gateway Intents (Discord API v10)
+# Official Gateway Intents mapping (Discord API v10)
 INTENTS: Dict[str, int] = {
     "GUILDS": 1 << 0,
     "GUILD_MEMBERS": 1 << 1,
     "GUILD_MODERATION": 1 << 2,
-    "GUILD_BANS": 1 << 2,  # Alias de compatibilidade
+    "GUILD_BANS": 1 << 2,  # Backwards compatibility alias
     "GUILD_EXPRESSIONS": 1 << 3,
-    "GUILD_EMOJIS_AND_STICKERS": 1 << 3,  # Alias de compatibilidade
+    "GUILD_EMOJIS_AND_STICKERS": 1 << 3,  # Backwards compatibility alias
     "GUILD_INTEGRATIONS": 1 << 4,
     "GUILD_WEBHOOKS": 1 << 5,
     "GUILD_INVITES": 1 << 6,
@@ -35,9 +35,34 @@ PRIVILEGED_INTENTS = {"GUILD_MEMBERS", "GUILD_PRESENCES", "MESSAGE_CONTENT"}
 
 
 class Intents:
+    # Standard Discord Gateway v10 Uppercase Bit Constants
+    GUILDS = 1 << 0
+    GUILD_MEMBERS = 1 << 1
+    GUILD_MODERATION = 1 << 2
+    GUILD_BANS = 1 << 2
+    GUILD_EXPRESSIONS = 1 << 3
+    GUILD_EMOJIS_AND_STICKERS = 1 << 3
+    GUILD_INTEGRATIONS = 1 << 4
+    GUILD_WEBHOOKS = 1 << 5
+    GUILD_INVITES = 1 << 6
+    GUILD_VOICE_STATES = 1 << 7
+    GUILD_PRESENCES = 1 << 8
+    GUILD_MESSAGES = 1 << 9
+    GUILD_MESSAGE_REACTIONS = 1 << 10
+    GUILD_MESSAGE_TYPING = 1 << 11
+    DIRECT_MESSAGES = 1 << 12
+    DIRECT_MESSAGE_REACTIONS = 1 << 13
+    DIRECT_MESSAGE_TYPING = 1 << 14
+    MESSAGE_CONTENT = 1 << 15
+    GUILD_SCHEDULED_EVENTS = 1 << 16
+    AUTO_MODERATION_CONFIGURATION = 1 << 20
+    AUTO_MODERATION_EXECUTION = 1 << 21
+    GUILD_MESSAGE_POLLS = 1 << 24
+    DIRECT_MESSAGE_POLLS = 1 << 25
+
     """
-    Construtor e gerenciador de Gateway Intents da API v10 do Discord.
-    Pode ser passado como inteiro, lista de strings ou instância de `Intents`.
+    Builder and manager for Discord API v10 Gateway Intents.
+    Can be passed as an integer, a list of intent names, or an `Intents` instance.
     """
 
     def __init__(self, value: int = 0, **kwargs: bool):
@@ -52,7 +77,7 @@ class Intents:
 
     @classmethod
     def default(cls) -> "Intents":
-        """Retorna todas as intents padrão (não privilegiadas)."""
+        """Returns all default (non-privileged) intents."""
         val = 0
         for name, bit in INTENTS.items():
             if name not in PRIVILEGED_INTENTS:
@@ -61,7 +86,7 @@ class Intents:
 
     @classmethod
     def all(cls) -> "Intents":
-        """Retorna todas as intents disponíveis na API v10 (incluindo privilegiadas)."""
+        """Returns all available intents in Discord API v10 (including privileged intents)."""
         val = 0
         for bit in INTENTS.values():
             val |= bit
@@ -69,12 +94,12 @@ class Intents:
 
     @classmethod
     def none(cls) -> "Intents":
-        """Retorna intents zeradas."""
+        """Returns zeroed intents."""
         return cls(0)
 
     @classmethod
     def resolve(cls, intents: Union[None, int, "Intents", Iterable[str]]) -> int:
-        """Converte qualquer representação de intents em um bitfield inteiro."""
+        """Converts any intent representation into an integer bitfield."""
         if intents is None:
             return int(cls.default())
         if isinstance(intents, Intents):
@@ -96,11 +121,18 @@ class Intents:
     def __or__(self, other: Union["Intents", int]) -> "Intents":
         return Intents(self.value | int(other))
 
+    def __ror__(self, other: Union["Intents", int]) -> "Intents":
+        return Intents(int(other) | self.value)
+
+    def __contains__(self, flag: Union["Intents", int]) -> bool:
+        f_val = flag.value if isinstance(flag, Intents) else int(flag)
+        return (self.value & f_val) == f_val
+
     def __repr__(self) -> str:
         return f"Intents(value={self.value})"
 
 
-# Flags completas de permissão da API v10 do Discord
+# Full permission bitflags for Discord API v10
 PERMISSION_FLAGS: Dict[str, int] = {
     "create_instant_invite": 1 << 0,
     "kick_members": 1 << 1,
@@ -157,8 +189,16 @@ PERMISSION_FLAGS: Dict[str, int] = {
 
 
 class Permissions:
+    ADMINISTRATOR = 1 << 3
+    MANAGE_GUILD = 1 << 5
+    MANAGE_CHANNELS = 1 << 4
+    MANAGE_MESSAGES = 1 << 13
+    BAN_MEMBERS = 1 << 2
+    KICK_MEMBERS = 1 << 1
+    MODERATE_MEMBERS = 1 << 40
+    SEND_MESSAGES = 1 << 11
     """
-    Representa e calcula o conjunto de permissões de um membro ou cargo na API v10 do Discord.
+    Represents and computes the permission bitfield of a member or role in Discord API v10.
     """
 
     def __init__(self, value: Union[int, str] = 0, **kwargs: bool):
@@ -171,7 +211,7 @@ class Permissions:
                 else:
                     self.value &= ~PERMISSION_FLAGS[key]
             else:
-                raise ValueError(f"Permissão desconhecida: {perm_name}")
+                raise ValueError(f"Unknown permission flag: {perm_name}")
 
     @classmethod
     def all(cls) -> "Permissions":
@@ -185,20 +225,20 @@ class Permissions:
         return cls(0)
 
     def has(self, **perms: bool) -> bool:
-        """Verifica se todas as permissões especificadas são satisfeitas (ou se possui administrator)."""
+        """Checks whether all specified permissions are satisfied (or if administrator is granted)."""
         if self.value & PERMISSION_FLAGS["administrator"]:
             return True
         for perm_name, expected in perms.items():
             key = perm_name.lower()
             if key not in PERMISSION_FLAGS:
-                raise ValueError(f"Permissão desconhecida: {perm_name}")
+                raise ValueError(f"Unknown permission flag: {perm_name}")
             has_bit = bool(self.value & PERMISSION_FLAGS[key])
             if has_bit != expected:
                 return False
         return True
 
     def missing(self, **perms: bool) -> List[str]:
-        """Retorna a lista de permissões ausentes."""
+        """Returns the list of missing permission names."""
         if self.value & PERMISSION_FLAGS["administrator"]:
             return []
         missing_list: List[str] = []

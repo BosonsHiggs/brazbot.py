@@ -1,17 +1,14 @@
 """
-Gerenciador completo de Mensagens, Reações, Interações, Modais, Enquetes e Webhooks (Discord API v10).
+Full Message, Reaction, Interaction, Modal, Poll, and Webhook Handler for Discord API v10.
 """
 
-import asyncio
-import json
 import logging
 import urllib.parse
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Union
 
-import aiohttp
-from aiohttp import FormData
-
 from brazbot.http import BASE_URL, HTTPClient
+from brazbot.snowflake import Snowflake
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +18,7 @@ def _serialize_embed(embed: Any) -> Dict[str, Any]:
         return embed.to_dict()
     if isinstance(embed, dict):
         return embed
-    raise TypeError(f"Tipo de embed inválido: {type(embed)}")
+    raise TypeError(f"Invalid embed type: {type(embed)}")
 
 
 def _serialize_components(components: Any) -> List[Dict[str, Any]]:
@@ -55,7 +52,7 @@ def _serialize_components(components: Any) -> List[Dict[str, Any]]:
 
 class MessageHandler:
     """
-    Manipulador central de mensagens, callbacks de interação, follow-ups, reações e webhooks na API v10.
+    Central handler for messages, interaction callbacks, follow-ups, reactions, and webhooks in Discord API v10.
     """
 
     def __init__(self, token: str, http_client: Optional[HTTPClient] = None):
@@ -118,7 +115,7 @@ class MessageHandler:
         tts: bool = False,
         reply_to: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Envia uma mensagem para um canal de texto, voz ou thread."""
+        """Sends a message to a text, voice, or thread channel."""
         ref = {"message_id": str(reply_to)} if reply_to else None
         payload = self._build_message_payload(
             content=content,
@@ -144,7 +141,7 @@ class MessageHandler:
         embed: Any,
         content: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Envia um embed para um canal (compatível com examples/simple_example.py)."""
+        """Sends an embed to a channel (compatible with examples/simple_example.py)."""
         return await self.send_message(channel_id, content=content, embed=embed)
 
     async def send_file(
@@ -153,7 +150,7 @@ class MessageHandler:
         file_path: str,
         content: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Envia um arquivo do disco para um canal."""
+        """Uploads a local file from disk to a channel."""
         return await self.send_message(channel_id, content=content, files=[file_path])
 
     async def send_image(
@@ -162,7 +159,7 @@ class MessageHandler:
         image_url: str,
         content: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Envia uma imagem incorporada via URL em um embed."""
+        """Sends an image embedded via URL."""
         return await self.send_message(
             channel_id, content=content, embed={"image": {"url": image_url}}
         )
@@ -177,7 +174,7 @@ class MessageHandler:
         files: Optional[List[Any]] = None,
         components: Optional[Any] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Edita uma mensagem existente."""
+        """Edits an existing message."""
         payload = self._build_message_payload(
             content=content, embed=embed, embeds=embeds, components=components
         )
@@ -202,9 +199,9 @@ class MessageHandler:
         response_type: int = 4,
     ) -> Any:
         """
-        Responde diretamente a uma Interação (`POST /interactions/{id}/{token}/callback`).
-        Se a interação já tiver sido adiada (`defer`), redireciona automaticamente para `send_followup_message`
-        ou edita a resposta original para evitar erro 40060 (Interaction has already been acknowledged).
+        Responds directly to an Interaction (`POST /interactions/{id}/{token}/callback`).
+        If the interaction has already been deferred (`_deferred`), automatically routes to
+        `send_followup_message` to prevent Discord error 40060 (Interaction has already been acknowledged).
         """
         if interaction.get("_deferred"):
             app_id = interaction.get("application_id")
@@ -252,7 +249,7 @@ class MessageHandler:
         ephemeral: bool = False,
         poll: Any = None,
     ) -> Optional[Dict[str, Any]]:
-        """Envia uma mensagem de acompanhamento (follow-up) após `ctx.defer()`."""
+        """Sends a follow-up message after `ctx.defer()`."""
         payload = self._build_message_payload(
             content=content,
             embed=embed,
@@ -281,7 +278,7 @@ class MessageHandler:
         components: Optional[Any] = None,
         message_id: str = "@original",
     ) -> Optional[Dict[str, Any]]:
-        """Edita a resposta original (ou follow-up) de uma interação."""
+        """Edits the original (or follow-up) response of an interaction."""
         payload = self._build_message_payload(
             content=content, embed=embed, embeds=embeds, components=components
         )
@@ -300,7 +297,7 @@ class MessageHandler:
         interaction_token: str,
         message_id: str = "@original",
     ) -> bool:
-        """Exclui a resposta original (ou follow-up) de uma interação."""
+        """Deletes the original (or follow-up) response of an interaction."""
         res = await self.http.request(
             "DELETE",
             f"/webhooks/{application_id}/{interaction_token}/messages/{message_id}",
@@ -316,7 +313,7 @@ class MessageHandler:
         custom_id: str,
         data: Any,
     ) -> Any:
-        """Envia um formulário Modal (Interaction Callback Type 9)."""
+        """Sends a Modal form response (Interaction Callback Type 9)."""
         if isinstance(data, dict) and data.get("type") == 9:
             payload = data
         elif hasattr(data, "to_component"):
@@ -396,7 +393,18 @@ class MessageHandler:
         message_ids: List[str],
         reason: Optional[str] = None,
     ) -> bool:
-        clean_ids = [str(m).strip() for m in message_ids if str(m).strip()]
+        """
+        Deletes between 2 and 100 messages in a single API call (`POST /channels/{id}/messages/bulk-delete`).
+        Automatically filters out messages older than 14 days and falls back to single delete if 1 ID is passed.
+        """
+        cutoff = Snowflake.from_datetime(datetime.now(timezone.utc) - timedelta(days=14, seconds=-30))
+        clean_ids = [
+            str(m).strip()
+            for m in message_ids
+            if str(m).strip() and Snowflake.is_valid(str(m).strip()) and Snowflake.parse(str(m).strip()) > cutoff
+        ]
+        # Deduplicate while preserving order
+        clean_ids = list(dict.fromkeys(clean_ids))
         if not clean_ids:
             return False
         if len(clean_ids) == 1:

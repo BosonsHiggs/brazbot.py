@@ -1,12 +1,12 @@
 """
-Modelo completo de Webhook da API v10 do Discord.
+Full Webhook model for Discord API v10.
 """
 
 from typing import Any, Dict, List, Optional
 
 
 class Webhook:
-    """Representa um Webhook da API v10 do Discord."""
+    """Represents a Webhook in Discord API v10."""
 
     def __init__(self, data: Dict[str, Any], bot: Any = None):
         self._raw = data or {}

@@ -1,11 +1,11 @@
 """
-Modelos de Canais da API v10 do Discord (Channel, TextChannel, VoiceChannel, StageChannel,
+Channel models for Discord API v10 (Channel, TextChannel, VoiceChannel, StageChannel,
 CategoryChannel, ForumChannel, MediaChannel, DMChannel).
 """
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import aiohttp
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class Channel:
-    """Classe base para qualquer canal do Discord (API v10)."""
+    """Base class for all Discord channels (API v10)."""
 
     def __init__(
         self,
@@ -84,7 +84,7 @@ class Channel:
         channel_id: str,
         user_id: Optional[str] = None,
     ) -> "Channel":
-        """Busca um canal pelo ID (utilizando cache do bot quando disponível)."""
+        """Fetches a channel by ID (using bot cache when available)."""
         cache_key = f"channel_{channel_id}"
         data = bot.get_cache_data(cache_key) if hasattr(bot, "get_cache_data") else None
 
@@ -127,7 +127,7 @@ class Channel:
         poll: Any = None,
         tts: bool = False,
     ) -> Any:
-        """Envia uma mensagem para o canal."""
+        """Sends a message to the channel."""
         if not hasattr(self.bot, "message_handler"):
             raise Exception("Bot message handler not available")
         return await self.bot.message_handler.send_message(
@@ -146,7 +146,7 @@ class Channel:
         return await self.send_message(content, **kwargs)
 
     async def clone(self, name: Optional[str] = None, reason: Optional[str] = None) -> "Channel":
-        """Clona este canal no mesmo servidor."""
+        """Clones this channel in the same guild with identical settings and permission overwrites."""
         if not self.guild_id:
             raise ValueError("Cannot clone a channel without guild_id")
         payload = {
@@ -173,7 +173,7 @@ class Channel:
         unique: bool = True,
         reason: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Cria um convite para este canal."""
+        """Creates an instant invite for this channel."""
         payload = {
             "max_age": max_age,
             "max_uses": max_uses,
@@ -185,14 +185,14 @@ class Channel:
         )
 
     async def delete(self, reason: Optional[str] = None) -> bool:
-        """Exclui este canal."""
+        """Deletes this channel."""
         await self.bot.http.request("DELETE", f"/channels/{self.id}", reason=reason)
         if hasattr(self.bot, "delete_cache_data"):
             self.bot.delete_cache_data(f"channel_{self.id}")
         return True
 
     async def invites(self) -> List[Dict[str, Any]]:
-        """Lista os convites ativos deste canal."""
+        """Lists active invites for this channel."""
         return await self.bot.http.request("GET", f"/channels/{self.id}/invites")
 
     async def move(
@@ -202,7 +202,7 @@ class Channel:
         lock_permissions: bool = False,
         reason: Optional[str] = None,
     ) -> "Channel":
-        """Move este canal para uma nova posição ou categoria."""
+        """Moves this channel to a new position or category."""
         payload: Dict[str, Any] = {
             "position": position,
             "lock_permissions": lock_permissions,
@@ -228,10 +228,9 @@ class Channel:
         target_type: Optional[int] = None,
         reason: Optional[str] = None,
     ) -> bool:
-        """Define sobrescritas de permissão (overwrites) para um membro (type=1) ou cargo (type=0)."""
+        """Sets permission overwrites for a member (type=1) or role (type=0)."""
         target_id = str(getattr(member_or_role, "id", member_or_role))
         if target_type is None:
-            # Role=0, Member=1
             target_type = 1 if hasattr(member_or_role, "username") or hasattr(member_or_role, "roles") else 0
         payload = {
             "allow": str(int(allow)),
@@ -247,7 +246,7 @@ class Channel:
         return True
 
     async def set_lock(self, locked: bool = True, reason: Optional[str] = None) -> bool:
-        """Tranca ou destranca o envio de mensagens para o cargo @everyone (id = guild_id)."""
+        """Locks or unlocks message sending for the @everyone role (id = guild_id)."""
         if not self.guild_id:
             return False
         send_messages_bit = 1 << 11
@@ -283,7 +282,7 @@ class Channel:
 
 
 class TextChannel(Channel):
-    """Canal de texto ou de anúncios da API v10 do Discord."""
+    """Text or Announcement channel in Discord API v10."""
 
     def __init__(
         self,
@@ -360,19 +359,29 @@ class TextChannel(Channel):
     async def delete_messages(
         self, message_ids: List[str], reason: Optional[str] = None
     ) -> bool:
+        """
+        Deletes up to 100 messages in a single bulk-delete API call (`POST /channels/{id}/messages/bulk-delete`).
+        Automatically filters out messages older than 14 days so the bulk-delete call never fails with error 50034.
+        """
         if not message_ids:
             return True
-        if len(message_ids) == 1:
+        cutoff = Snowflake.from_datetime(datetime.now(timezone.utc) - timedelta(days=14, seconds=-30))
+        valid_ids = [
+            str(m) for m in message_ids if Snowflake.is_valid(m) and Snowflake.parse(m) > cutoff
+        ]
+        if not valid_ids:
+            return False
+        if len(valid_ids) == 1:
             await self.bot.http.request(
-                "DELETE", f"/channels/{self.id}/messages/{message_ids[0]}", reason=reason
+                "DELETE", f"/channels/{self.id}/messages/{valid_ids[0]}", reason=reason
             )
             return True
-        if len(message_ids) > 100:
+        if len(valid_ids) > 100:
             raise ValueError("Cannot bulk delete more than 100 messages at once")
         await self.bot.http.request(
             "POST",
             f"/channels/{self.id}/messages/bulk-delete",
-            json_data={"messages": [str(m) for m in message_ids]},
+            json_data={"messages": valid_ids},
             reason=reason,
         )
         return True
@@ -389,7 +398,7 @@ class TextChannel(Channel):
         return self
 
     async def set_slowmode(self, seconds: int, reason: Optional[str] = None) -> "TextChannel":
-        """Define o modo lento (slowmode) do canal (0 a 21600 segundos)."""
+        """Sets channel slowmode delay (0 to 21600 seconds)."""
         seconds = max(0, min(21600, int(seconds)))
         return await self.edit(rate_limit_per_user=seconds, reason=reason)
 
@@ -449,16 +458,63 @@ class TextChannel(Channel):
         around: Optional[str] = None,
         reason: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Remove até `limit` mensagens que passam pela função `check`."""
-        fetched = await self.history(limit=limit, before=before, after=after, around=around)
-        to_delete = [m for m in fetched if (check is None or check(m))]
-        if to_delete:
-            for i in range(0, len(to_delete), 100):
-                batch = to_delete[i : i + 100]
+        """
+        Purges up to `limit` messages (even >100 across multiple pages) matching `check`
+        using batched `bulk-delete` requests (100 messages per API call) without hammering the API.
+        """
+        collected: List[Dict[str, Any]] = []
+        cursor_before = before
+        remaining_to_scan = max(1, int(limit))
+        cutoff = Snowflake.from_datetime(datetime.now(timezone.utc) - timedelta(days=14, seconds=-30))
+
+        while remaining_to_scan > 0:
+            fetch_size = min(100, remaining_to_scan)
+            page = await self.history(
+                limit=fetch_size, before=cursor_before, after=after, around=around
+            )
+            if not page:
+                break
+
+            for msg in page:
+                msg_id = msg.get("id")
+                if msg_id and Snowflake.is_valid(msg_id) and Snowflake.parse(msg_id) <= cutoff:
+                    # Reached messages older than 14 days (cannot be bulk-deleted)
+                    remaining_to_scan = 0
+                    break
+                if check is None or check(msg):
+                    collected.append(msg)
+
+            cursor_before = page[-1].get("id")
+            remaining_to_scan -= len(page)
+            if len(page) < fetch_size:
+                break
+
+        if collected:
+            for i in range(0, len(collected), 100):
+                batch = collected[i : i + 100]
                 await self.delete_messages([m["id"] for m in batch], reason=reason)
-                if i + 100 < len(to_delete):
-                    await asyncio.sleep(1.0)
-        return to_delete
+        return collected
+
+    async def clean_all_messages(
+        self,
+        strategy: str = "clone",
+        max_batches: int = 20,
+        reason: Optional[str] = None,
+    ) -> Union["TextChannel", int]:
+        """
+        Wipes all messages in the channel without hammering the API:
+        - `strategy='clone'`: Clones the channel and deletes the old one in just 2 API calls total!
+          Returns the newly created `TextChannel`.
+        - `strategy='batch'`: Paginates and bulk-deletes up to `max_batches * 100` messages (1 API call per 100 messages).
+          Returns the number of deleted messages.
+        """
+        if strategy == "clone":
+            new_channel = await self.clone(name=self.name, reason=reason or "Channel clean_all (clone)")
+            await self.delete(reason=reason or "Channel clean_all (delete old)")
+            return new_channel  # type: ignore[return-value]
+
+        deleted = await self.purge(limit=max_batches * 100, reason=reason)
+        return len(deleted)
 
     async def trigger_typing(self) -> bool:
         await self.bot.http.request("POST", f"/channels/{self.id}/typing")
@@ -469,7 +525,7 @@ class TextChannel(Channel):
 
 
 class VoiceChannel(Channel):
-    """Canal de voz da API v10 do Discord com suporte completo a VoiceClient, Status e Soundboard."""
+    """Voice channel in Discord API v10 with full support for VoiceClient, Status, and Soundboard."""
 
     def __init__(
         self,
@@ -512,7 +568,7 @@ class VoiceChannel(Channel):
         return cls(ch._raw, bot, guild_id, channel_id, user_id)
 
     async def connect(self, self_mute: bool = False, self_deaf: bool = False) -> VoiceClient:
-        """Conecta o bot a este canal de voz."""
+        """Connects the bot to this voice channel."""
         if not self.bot:
             raise Exception("Bot instance not available")
         if self._voice_client and self._voice_client.is_connected():
@@ -523,7 +579,7 @@ class VoiceChannel(Channel):
         return self._voice_client
 
     async def disconnect(self) -> None:
-        """Desconecta o bot deste canal de voz."""
+        """Disconnects the bot from this voice channel."""
         if self._voice_client:
             await self._voice_client.disconnect()
             self._voice_client = None
@@ -548,7 +604,7 @@ class VoiceChannel(Channel):
 
     async def set_voice_status(self, status: Optional[str] = None) -> bool:
         """
-        Define o texto de status do canal de voz (`PUT /channels/{channel.id}/voice-status` - API v10).
+        Sets the custom status text of the voice channel (`PUT /channels/{channel.id}/voice-status` - API v10).
         """
         await self.bot.http.request(
             "PUT",
@@ -565,7 +621,7 @@ class VoiceChannel(Channel):
     async def send_soundboard_sound(
         self, sound_id: str, source_guild_id: Optional[str] = None
     ) -> bool:
-        """Toca um efeito do Soundboard neste canal de voz (o bot deve estar conectado ao canal)."""
+        """Plays a Soundboard sound effect in this voice channel (bot must be connected to the channel)."""
         payload: Dict[str, Any] = {"sound_id": str(sound_id)}
         if source_guild_id:
             payload["source_guild_id"] = str(source_guild_id)
@@ -576,7 +632,7 @@ class VoiceChannel(Channel):
 
 
 class StageChannel(VoiceChannel):
-    """Canal de Palco (Stage Channel - type 13) da API v10 do Discord."""
+    """Stage channel (type 13) in Discord API v10."""
 
     def __init__(
         self,
@@ -631,7 +687,7 @@ class StageChannel(VoiceChannel):
 
 
 class CategoryChannel(Channel):
-    """Canal de Categoria (type 4) da API v10 do Discord."""
+    """Category channel (type 4) in Discord API v10."""
 
     def __init__(
         self,
@@ -670,7 +726,7 @@ class CategoryChannel(Channel):
 
 
 class ForumChannel(TextChannel):
-    """Canal de Fórum (type 15) da API v10 do Discord."""
+    """Forum channel (type 15) in Discord API v10."""
 
     def __init__(
         self,
@@ -710,7 +766,7 @@ class ForumChannel(TextChannel):
 
 
 class MediaChannel(ForumChannel):
-    """Canal de Mídia (type 16) da API v10 do Discord."""
+    """Media channel (type 16) in Discord API v10."""
 
     def __init__(
         self,
@@ -725,7 +781,7 @@ class MediaChannel(ForumChannel):
 
 
 class DMChannel(TextChannel):
-    """Canal de Mensagem Direta (type 1 / type 3) da API v10 do Discord."""
+    """Direct Message channel (type 1 / type 3) in Discord API v10."""
 
     def __init__(
         self,
@@ -746,7 +802,7 @@ def channel_factory(
     guild_id: Optional[str] = None,
     user_id: Optional[str] = None,
 ) -> Channel:
-    """Instancia a subclasse específica de Channel de acordo com o campo `type` da API v10."""
+    """Instantiates the specific Channel subclass matching the Discord API v10 `type` field."""
     ch_type = data.get("type", 0)
     if ch_type in (0, 5):
         return TextChannel(data, bot=bot, guild_id=guild_id, user_id=user_id)

@@ -1,5 +1,5 @@
 """
-Decorador `autocomplete_command` para comandos Slash com sugestões dinâmicas (Autocomplete).
+`autocomplete_command` decorator for Slash Commands with dynamic autocomplete suggestions.
 """
 
 from typing import Any, Callable, Optional

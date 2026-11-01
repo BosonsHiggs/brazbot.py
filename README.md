@@ -1,136 +1,152 @@
-# brazbot.py v2.0.0 🇧🇷
+# brazbot.py v2.0.0
 
-**brazbot.py** é uma biblioteca brasileira nativa, assíncrona e pronta para produção para criação de bots no Discord em Python — construída **diretamente sobre a API HTTP/REST v10, Gateway v10 e Voice Gateway v8 do Discord**, sem depender de nenhuma outra biblioteca de bots.
+**Production-ready native Python library for Discord API v10 and Voice Gateway v8 — built from scratch with zero third-party Discord library dependencies.**
 
----
-
-## ✨ Principais Novidades da v2.0.0
-
-- **100% Nativa na API v10 do Discord & Voice Gateway v8 (`?v=8`)**:
-  - Suporte completo a `RESUME` (Opcode 6), `RECONNECT` (Opcode 7), `INVALID_SESSION` (Opcode 9), `HEARTBEAT` com *jitter* e cálculo de latência (`bot.latency`), e compressão `zlib-stream`.
-  - Cabeçalho `User-Agent: DiscordBot (https://github.com/BosonsHiggs/brazbot.py, 2.0.0)` e **Rate Limiting Preventivo por Bucket (`X-RateLimit-Bucket` + Major Parameters `guild_id`/`channel_id`/`webhook_id`)** em total conformidade com as diretrizes oficiais da comunidade Discord API (`meew0`).
-- **Voz e Música Totalmente Reescritas (`VoiceClient` + `yt-dlp`)**:
-  - **Criptografia de Transporte AEAD Moderna**: Suporte nativo a `aead_aes256_gcm_rtpsize` (via `cryptography`) e `aead_xchacha20_poly1305_rtpsize` (via `PyNaCl`), substituindo o antigo modo `xsalsa20_poly1305` descontinuado pelo Discord.
-  - **IP Discovery de 74 bytes** conforme especificação oficial do protocolo UDP do Discord.
-  - **Codificador e Decodificador Opus Nativo (`ctypes` `libopus`) + Demuxer Ogg/Opus Puro**: Transmite quadros Opus reais (48kHz, estéreo, 20ms) com envio automático dos 5 quadros de silêncio (`0xF8, 0xFF, 0xFE`) e recepção/descriptografia de pacotes UDP para *bridges* de voz entre servidores (`example_phone_call.py`).
-  - **Motor de Música Integrado (`brazbot.music`)**: Extração assíncrona com `yt-dlp` (YouTube, Playlists, SoundCloud, busca por nome e links diretos), controle real de volume em PCM 16-bit (0% a 200%), `/seek` (avançar/retroceder para um segundo específico) e filtros de áudio FFmpeg em tempo real (`bassboost`, `nightcore`, `vaporwave`, `8d`, `treble`, `karaoke`, `echo`).
-- **Novos Recursos da API v10 & Cogs Prontas para Criação de Bots**:
-  - **Cogs Nativas Embutidas (`brazbot.cogs_builtin`)**: `MusicCog`, `ModerationCog`, `UtilityCog` e `FunCog` prontas para adicionar com `bot.add_cog(...)`.
-  - **Enquetes Nativas (`Poll`)**, **AutoModeração (`AutoModRule`)**, **Soundboard (`Soundboard`)**, **Eventos Agendados (`ScheduledEvent`)**, **Status de Canal de Voz (`VoiceChannel.set_voice_status`)** e **Bulk Ban (`Guild.bulk_ban`)**.
-  - **Todos os Menus de Seleção da API v10**: `Dropdown` (`StringSelect`), `UserSelect`, `RoleSelect`, `MentionableSelect`, `ChannelSelect`, além de `Button`, `ActionRow`, `View` e `Form` (Modals).
-  - **CLI Integrada (`brazbot`)**: `brazbot init meu_bot`, `brazbot doctor` e `brazbot version`.
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Discord API v10](https://img.shields.io/badge/Discord%20API-v10-5865F2.svg)](https://discord.com/developers/docs/reference)
+[![Voice Gateway v8](https://img.shields.io/badge/Voice%20Gateway-v8-success.svg)](https://discord.com/developers/docs/topics/voice-connections)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
-## 📦 Instalação (Modo Produção)
+## Key Features
 
-Certifique-se de utilizar **Python 3.10+** (recomendado Python 3.11+) e o `ffmpeg` instalado no sistema para recursos de voz:
-
-```bash
-# Instalação direta do pacote local ou via Git
-pip install -U .
-
-# Ou instalando forçando as últimas versões de todos os pacotes (2026):
-pip install -U ".[latest]"
-```
-
-Para verificar se todas as dependências (`aiohttp`, `PyNaCl`, `cryptography`, `yt-dlp`, `ffmpeg`, `libopus`) estão prontas no seu servidor de produção:
-
-```bash
-brazbot doctor
-```
+- **100% Native Discord API v10 & Voice Gateway v8**: Communicates directly with `https://discord.com/api/v10` and `wss://gateway.discord.gg/?v=10&encoding=json` using `aiohttp` and `cryptography`. No wrapper libraries (`discord.py`, `nextcord`, etc.) are used.
+- **Compliant with Discord API Library Guidelines (`meew0` specification)**:
+  - Explicit `DiscordBot (https://github.com/BosonsHiggs/brazbot.py, 2.0.0)` `User-Agent` header on every request.
+  - Pre-emptive per-bucket rate limiting (`X-RateLimit-Bucket`, `X-RateLimit-Remaining`, `X-RateLimit-Reset-After`) keyed by `(method, route_template, major_parameter)` (`channel_id`, `guild_id`, `webhook_id`), plus global `asyncio.Event` lock and `429 Too Many Requests` backoff.
+  - Typed `Intents` bitfield (`Intents.default()`, `Intents.all()`) and full Snowflake utilities (`Snowflake`).
+- **Voice Gateway v8 & Modern AEAD Encryption**:
+  - Connects to `?v=8`, handles Opcode `8 Hello` dynamic heartbeat intervals, and includes sequence recognition (`seq_ack`) in Opcode `3 Heartbeat` and Opcode `6 Resume`.
+  - Standard 74-byte UDP IP Discovery packet (`0x0001` request / `0x0002` response).
+  - Supports Discord's mandatory modern AEAD voice encryption modes (`aead_aes256_gcm_rtpsize` and `aead_xchacha20_poly1305_rtpsize`).
+  - Native `ctypes` `libopus` `OpusEncoder` / `OpusDecoder`, pure-Python `OggOpusDemuxer`, `FFmpegOpusAudio`, and `MusicPlayer` with `yt-dlp` integration.
+- **High-Throughput Server Moderation (`brazbot.moderation`)**:
+  - **`BatchDeleteQueue`**: Coalesces message deletions from flood bursts or profanity triggers over a configurable window (default `0.5s`) and executes a single `POST /channels/{id}/messages/bulk-delete` call (deleting up to **100 messages per HTTP request** instead of hammering the Discord API with individual `DELETE` calls).
+  - **`AntiFloodManager`**: Detects sliding-window message bursts, duplicate spam, mention spam, and CAPS-lock spam, automatically queuing offending messages for bulk deletion and applying temporary timeouts.
+  - **`ProfanityFilter`**: Anti-evasion obscene word detector that normalizes leetspeak (`@ -> a`, `$ -> s`, `0 -> o`, `1 -> i`, `3 -> e`), strips Unicode accents/diacritics, removes zero-width characters, collapses character repeats, and syncs directly with native Discord AutoMod v10 rules.
+  - **Multi-Message & Full-Channel Cleanup**: `TextChannel.purge()` (paginated 100-message bulk-delete batches) and `TextChannel.clean_all_messages()` (`mode="clone"` wipes an entire channel's history in **2 API calls** via clone + delete, or `mode="batch"` for 100-message bulk batches).
+- **Modern Discord v10 Capabilities**:
+  - Slash Commands (`@bot.slash_command`), Context Menus (`@bot.user_command`, `@bot.message_command`), Autocomplete, and Modals.
+  - **Components v2** (`IS_COMPONENTS_V2 = 1 << 15`): `Container`, `Section`, `TextDisplay`, `Thumbnail`, `MediaGallery`, `FileComponent`, `Separator`, plus `ActionRow`, `Button`, and `SelectMenu`.
+  - **Polls API**, **AutoMod v10**, **Bulk Ban** (`POST /guilds/{id}/bulk-ban` up to 200 users in 1 call), **Forum & Stage Channels**, **Scheduled Events**, and **Monetization / Entitlements / SKUs**.
 
 ---
 
-## 🚀 Criando um Bot Completo em Minutos
-
-Você pode gerar um projeto limpo automaticamente pelo terminal:
+## Installation
 
 ```bash
-brazbot init meu_bot
+pip install .
 ```
 
-Ou criar seu arquivo `bot.py`:
+Or install in editable development mode:
+
+```bash
+pip install -e ".[speed,dev]"
+```
+
+### System Requirements for Voice & Music
+- **Python**: `>= 3.10`
+- **FFmpeg**: Installed on system `PATH` (for `FFmpegOpusAudio` transcoding)
+- **libopus**: System shared library (`libopus.so.0` on Linux, `libopus.dylib` on macOS, or `opus.dll` on Windows) for raw PCM encoding/decoding
+
+---
+
+## Quick Start: Slash Commands & Prefix Commands
 
 ```python
 import os
-from brazbot import Bot, Embed, FunCog, ModerationCog, MusicCog, UtilityCog
+from brazbot import Client, CommandContext, Embed, Intents, InteractionContext
 
-intents = ["GUILDS", "GUILD_VOICE_STATES", "GUILD_MESSAGES", "MESSAGE_CONTENT", "GUILD_MEMBERS"]
+intents = Intents.default() | Intents.MESSAGE_CONTENT
+bot = Client(command_prefix="!", intents=intents, sync_commands=True)
 
-class MeuBot(Bot):
-    async def setup_hook(self):
-        # Ativa mais de 25 comandos prontos de Música, Moderação, Utilidades e Diversão!
-        self.add_cog(MusicCog(self))
-        self.add_cog(ModerationCog(self))
-        self.add_cog(UtilityCog(self))
-        self.add_cog(FunCog(self))
 
-    async def on_ready(self, data):
-        print(f"Conectado como {data['user']['username']} (App ID: {self.application_id})")
-        await self.command_handler.sync_commands(guild_id=os.getenv("DISCORD_GUILD_ID"))
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
 
-bot = MeuBot(token=os.getenv("DISCORD_TOKEN"), command_prefix="!", intents=intents)
 
-@bot.command(name="ola", description="Envia uma saudação personalizada")
-async def ola(ctx):
-    await ctx.reply(
-        embed=Embed(
-            title="Olá! 👋",
-            description=f"Bem-vindo(a), {ctx.author.mention}!",
-            color=Embed.Color.GREEN,
-        )
+@bot.command(name="ping", description="Check bot responsiveness")
+async def ping(ctx: CommandContext):
+    await ctx.reply("Pong!")
+
+
+@bot.slash_command(name="info", description="Display server information")
+async def info(ctx: InteractionContext):
+    embed = Embed(
+        title="BrazBot v2.0.0",
+        description="Running natively on Discord HTTP/Gateway API v10.",
+        color=0x5865F2,
     )
+    await ctx.respond(embed=embed)
 
-if __name__ == "__main__":
-    bot.run()
+
+bot.run(os.environ["DISCORD_TOKEN"])
 ```
 
 ---
 
-## 🗂️ Estrutura Limpa da Biblioteca
+## Full Server Moderation Example (Anti-Flood, Bulk Delete & Profanity Filter)
+
+See [`example_moderation_bot.py`](example_moderation_bot.py) for a complete moderation bot featuring:
+- **Automatic flood removal** via `AntiFloodManager` + `BatchDeleteQueue` (deletes up to 100 flood messages in a single `bulk-delete` HTTP request).
+- **Bulk message removal & full-channel wipe** (`/purge`, `/purge_user`, `/clean_all`) without forcing the API with individual `DELETE` calls.
+- **Anti-evasion obscene word filter** (`ProfanityFilter`) with leetspeak/accent normalization and native Discord AutoMod v10 synchronization (`/automod_sync`).
+- **20+ Slash Commands**: `/ban`, `/softban`, `/massban`, `/unban`, `/kick`, `/timeout`, `/untimeout`, `/warn`, `/warnings`, `/clear_warnings`, `/purge`, `/purge_user`, `/clean_all`, `/slowmode`, `/lock`, `/unlock`, `/profanity_add`, `/profanity_remove`, `/profanity_list`, `/antiflood_config`, `/automod_sync`, and `/modstats`.
+
+```python
+from brazbot import Client, FloodConfig, Intents, ModerationGuard, ProfanityFilter
+
+bot = Client(command_prefix="!", intents=Intents.all(), sync_commands=True)
+
+mod_guard = ModerationGuard(
+    bot,
+    profanity_filter=ProfanityFilter(words=["badword", "scamlink"]),
+    flood_config=FloodConfig(max_messages=5, window_seconds=4.0, auto_timeout_seconds=300),
+    flush_interval=0.5,  # Coalesces deletions every 0.5s into bulk-delete calls (up to 100 msgs/call)
+)
+```
+
+---
+
+## Package Architecture
 
 ```text
 brazbot/
-├── __init__.py             # Exportações públicas unificadas da biblioteca
-├── bot.py                  # Cliente Gateway v10 (DiscordBot / Bot), RESUME e Voice States
-├── bot_itimized.py         # Variante com compressão zlib-stream habilitada por padrão
-├── http.py                 # Cliente REST v10 com Rate Limiting preventivo por Bucket e Global
-├── voiceclient.py          # Voice Gateway v8, UDP IP Discovery (74B), AEAD RTP e Opus (ctypes/Ogg)
-├── music.py                # Motor de música assíncrono (yt-dlp, GuildMusicPlayer, filtros FFmpeg, seek)
-├── commands.py             # CommandContext híbrido (Prefix + Slash + Context Menus + Autocomplete)
-├── decorators.py           # Decoradores (@has_permissions, @in_voice_channel, @rate_limit, @tasks, etc.)
-├── cogs.py                 # Classe base modular Cog
-├── cogs_builtin.py         # Cogs prontas: MusicCog, ModerationCog, UtilityCog, FunCog
-├── subgroups.py            # SubCommandGroup para comandos aninhados (SUB_COMMAND / SUB_COMMAND_GROUP)
-├── channels.py             # Channel, TextChannel, VoiceChannel, StageChannel, Category, Forum, Media, DM
-├── guilds.py               # Guild (membros, cargos, bans, bulk_ban, automod, templates, webhooks)
-├── member.py               # Member e VoiceState (timeout, untimeout, roles, DM, voice.channel)
-├── roles.py                # Role (criação, edição, atribuição e cálculo de permissões)
-├── threads.py              # Thread (arquivamento, tags de fórum, membros)
-├── message_handler.py      # Envio/edição de mensagens, interações, follow-ups, modais e reações
-├── messages.py             # Message e PartialMessage
-├── embed.py                # Construtor fluente Embed e paleta EmbedColor
-├── buttons.py              # Button, ButtonStyle, ActionRow e View com callbacks
-├── dropdowns.py            # Dropdown (StringSelect), UserSelect, RoleSelect, MentionableSelect, ChannelSelect
-├── forms.py                # Form e FormField (Modals da API v10)
-├── polls.py                # Enquetes nativas da API v10 (Poll, PollAnswer, PollMedia)
-├── automod.py              # Regras de AutoModeração da API v10 (AutoModRule)
-├── soundboard.py           # Efeitos sonoros do Soundboard da API v10 (Soundboard, SoundboardSound)
-├── scheduled_events.py     # Eventos agendados do servidor (ScheduledEvent)
-├── webhooks.py             # Gerenciamento e execução de Webhooks
-├── permissions.py          # Bitfields completos de Permissions e Intents da API v10
-├── audit_log_entry.py      # AuditLogEntry
-├── eventstype.py           # Enum EventTypes de auditoria da API v10
-├── errors.py               # Hierarquia completa de exceções (BrazbotError, HTTPException, etc.)
-├── cache.py                # Cache em memória com expiração TTL
-├── snowflake.py            # Utilitários de Snowflake (64 bits)
-├── utils.py                # Funções auxiliares de embeds, paginação e timestamps
-└── cli.py                  # Interface de linha de comando (`brazbot init`, `brazbot doctor`, `brazbot version`)
+├── __init__.py          # Public API exports and version metadata
+├── client.py            # Main Client (Gateway v10, HTTP v10, Slash & Prefix routing, Voice manager)
+├── http.py              # Discord HTTP v10 client with per-route pre-emptive rate-limit buckets
+├── gateway.py           # Gateway v10 WebSocket client with heartbeat, zlib-stream, and resume
+├── voice.py             # Voice Gateway v8 + 74-byte UDP IP Discovery + AEAD AES-GCM / XChaCha20
+├── music.py             # yt-dlp extractor, FFmpegOpusAudio, OggOpusDemuxer, and MusicPlayer queue
+├── moderation.py        # BatchDeleteQueue, AntiFloodManager, ProfanityFilter, and ModerationGuard
+├── interactions.py      # Slash commands, Context Menus, Autocomplete, and InteractionContext
+├── components.py        # Components v1 & v2 (Buttons, Selects, Modals, Containers, Views)
+├── automod.py           # Discord AutoMod v10 rule and action models
+├── polls.py             # Discord Polls v10 models
+├── models.py            # User, Member, Guild, Role, Attachment, Sticker, ScheduledEvent, SKU
+├── channels.py          # TextChannel (multi-page purge & clean_all_messages), VoiceChannel, ThreadChannel
+├── embed.py             # Rich Embed builder with validation
+├── flags.py             # Intents, Permission, MessageFlags, SystemChannelFlags
+├── snowflake.py         # Discord Snowflake ID parser & generator
+├── cogs.py              # Modular Cog and command registration base classes
+├── cogs_builtin.py      # Ready-to-use ModerationCog, MusicCog, VoiceCog, UtilityCog, FunCog
+├── cache.py             # LRU entity cache for guilds, channels, users, and members
+├── sharding.py          # Multi-shard gateway manager (ShardManager)
+└── tasks.py             # Asynchronous periodic background task loops (@loop)
 ```
 
 ---
 
-## 📄 Licença
+## Running Tests
 
-Distribuído sob a licença **MIT**. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+```bash
+pytest
+# or
+python3 -m unittest discover -s tests
+```
+
+## License
+
+Released under the [MIT License](LICENSE).

@@ -1,5 +1,5 @@
 """
-Funções utilitárias para criação rápida de Embeds, IDs únicos, formatação de tempo e paginação.
+Utility functions for rapid Embed creation, unique IDs, timestamp formatting, and pagination.
 """
 
 import uuid
@@ -14,7 +14,7 @@ def create_embed(
     footer: Optional[str] = None,
     thumbnail: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Cria um dicionário de embed pronto para envio na API do Discord."""
+    """Creates an embed dictionary ready for sending to the Discord API."""
     embed: Dict[str, Any] = {
         "title": title,
         "description": description,
@@ -28,13 +28,13 @@ def create_embed(
 
 
 def format_command_response(response_text: str, is_error: bool = False) -> Dict[str, Any]:
-    """Formata uma resposta de comando como embed de sucesso (verde) ou erro (vermelho)."""
+    """Formats a command response as a success (green) or error (red) embed."""
     color = 0xED4245 if is_error else 0x57F287
-    return create_embed("Resposta do Comando", str(response_text), color)
+    return create_embed("Command Response", str(response_text), color)
 
 
-def create_error_embed(error_message: str, title: str = "❌ Erro") -> Dict[str, Any]:
-    """Cria um embed padronizado de erro."""
+def create_error_embed(error_message: str, title: str = "❌ Error") -> Dict[str, Any]:
+    """Creates a standardized error embed dictionary."""
     return {
         "title": title,
         "description": str(error_message),
@@ -42,8 +42,8 @@ def create_error_embed(error_message: str, title: str = "❌ Erro") -> Dict[str,
     }
 
 
-def create_success_embed(message: str, title: str = "✅ Sucesso") -> Dict[str, Any]:
-    """Cria um embed padronizado de sucesso."""
+def create_success_embed(message: str, title: str = "✅ Success") -> Dict[str, Any]:
+    """Creates a standardized success embed dictionary."""
     return {
         "title": title,
         "description": str(message),
@@ -52,14 +52,14 @@ def create_success_embed(message: str, title: str = "✅ Sucesso") -> Dict[str, 
 
 
 def generate_unique_id(max_length: int = 8) -> int:
-    """Gera um ID inteiro pseudoaleatório único com base em UUID4."""
+    """Generates a unique pseudorandom integer ID based on UUID4."""
     unique_id = uuid.uuid4()
     shortened_hex = unique_id.hex[: max(1, min(32, max_length))]
     return int(shortened_hex, 16)
 
 
 def generate_list(items: Optional[Iterable[Any]] = None) -> Generator[Any, None, None]:
-    """Gerador simples sobre uma coleção de itens."""
+    """Simple generator yielding items from an iterable."""
     if items:
         for item in items:
             yield item
@@ -67,9 +67,9 @@ def generate_list(items: Optional[Iterable[Any]] = None) -> Generator[Any, None,
 
 def format_discord_timestamp(dt: Optional[datetime] = None, style: str = "R") -> str:
     """
-    Formata um `datetime` na sintaxe nativa de timestamp do Discord (`<t:UNIX:STYLE>`).
-    Estilos: 't' (hora curta), 'T' (hora longa), 'd' (data curta), 'D' (data longa),
-    'f' (data/hora curta), 'F' (data/hora longa), 'R' (relativo).
+    Formats a `datetime` object into native Discord timestamp syntax (`<t:UNIX:STYLE>`).
+    Styles: 't' (short time), 'T' (long time), 'd' (short date), 'D' (long date),
+    'f' (short date/time), 'F' (long date/time), 'R' (relative).
     """
     if dt is None:
         dt = datetime.now(timezone.utc)
@@ -77,5 +77,5 @@ def format_discord_timestamp(dt: Optional[datetime] = None, style: str = "R") ->
 
 
 def chunk_list(items: List[Any], chunk_size: int = 10) -> List[List[Any]]:
-    """Divide uma lista em páginas/blocos de tamanho `chunk_size`."""
+    """Splits a list into pages/chunks of size `chunk_size`."""
     return [items[i : i + chunk_size] for i in range(0, len(items), max(1, chunk_size))]

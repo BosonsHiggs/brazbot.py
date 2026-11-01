@@ -1,5 +1,5 @@
 """
-Versão otimizada com compressão `zlib-stream` habilitada por padrão (`bot_itimized.py`).
+Optimized bot variant with `zlib-stream` Gateway compression enabled by default (`bot_itimized.py`).
 """
 
 from typing import Iterable, Optional, Union
@@ -9,7 +9,7 @@ from brazbot.permissions import INTENTS, Intents
 
 
 class DiscordBot(_BaseDiscordBot):
-    """Subclasse de `DiscordBot` com compressão `zlib-stream` habilitada por padrão no Gateway v10."""
+    """Subclass of `DiscordBot` with `zlib-stream` transport compression enabled by default on Gateway v10."""
 
     def __init__(
         self,

@@ -1,5 +1,5 @@
 """
-Compatibilidade para `optional_argument_command`.
+Backwards compatibility helper for `optional_argument_command`.
 """
 
 from typing import Any, Callable, Optional

@@ -1,17 +1,17 @@
 """
-Modelo de Servidor (Guild) completo para a API v10 do Discord.
+Full Guild model for Discord API v10.
 """
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from brazbot.member import Member
 from brazbot.snowflake import Snowflake
 
 
 class Guild:
-    """Representa um servidor (Guild) na API v10 do Discord."""
+    """Represents a Discord Guild (server) in Discord API v10."""
 
     def __init__(self, data: Dict[str, Any], bot: Any = None):
         self._raw = data or {}
@@ -41,7 +41,7 @@ class Guild:
         self.explicit_content_filter = data.get("explicit_content_filter")
         self.roles = data.get("roles", [])
         self.emojis = data.get("emojis", [])
-        self. stickers = data.get("stickers", [])
+        self.stickers = data.get("stickers", [])
         self.features = data.get("features", [])
         self.mfa_level = data.get("mfa_level")
         self.application_id = data.get("application_id")
@@ -60,7 +60,7 @@ class Guild:
         )
         self.premium_tier = data.get("premium_tier", 0)
         self.premium_subscription_count = data.get("premium_subscription_count", 0)
-        self.preferred_locale = data.get("preferred_locale", "pt-BR")
+        self.preferred_locale = data.get("preferred_locale", "en-US")
         self.public_updates_channel = data.get("public_updates_channel_id") or data.get(
             "public_updates_channel"
         )
@@ -171,7 +171,7 @@ class Guild:
         delete_message_days: int = 0,
         reason: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Usa o endpoint nativo de Bulk Ban da API v10 (`POST /guilds/{guild.id}/bulk-ban`)."""
+        """Uses the native Discord API v10 Bulk Ban endpoint (`POST /guilds/{guild.id}/bulk-ban`)."""
         payload = {
             "user_ids": [str(uid) for uid in user_ids[:200]],
             "delete_message_seconds": min(604800, max(0, int(delete_message_days) * 86400)),
@@ -210,7 +210,7 @@ class Guild:
         return False
 
     async def fetch_voice_state(self, user_id: str = "@me") -> Dict[str, Any]:
-        """Busca o estado de voz de um membro via HTTP (`GET /guilds/{guild.id}/voice-states/{user.id}`)."""
+        """Fetches a member's voice state over HTTP (`GET /guilds/{guild.id}/voice-states/{user.id}`)."""
         return await self.bot.http.request(
             "GET", f"/guilds/{self.id}/voice-states/{user_id}"
         )

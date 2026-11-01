@@ -1,6 +1,6 @@
 """
-Sistema modular de Cogs (`Cog`) para organização limpa de comandos, listeners e estado em bots grandes.
-Suporta tanto registro imperativo (`@self.command`, `@self.event`) quanto declarativo (`@Cog.listener`, `@command`).
+Modular Cog system (`Cog`) for clean organization of commands, listeners, and state in large bots.
+Supports both imperative registration (`@self.command`, `@self.event`) and declarative (`@Cog.listener`, `@command`).
 """
 
 from typing import Any, Callable, List, Optional
@@ -8,7 +8,7 @@ from typing import Any, Callable, List, Optional
 
 class Cog:
     """
-    Classe base para módulos de extensão (Cogs) na biblioteca brazbot.py.
+    Base class for extension modules (Cogs) in the brazbot.py library.
     """
 
     def __init__(self, bot: Any = None):
@@ -16,7 +16,7 @@ class Cog:
 
     @staticmethod
     def listener(name: Optional[str] = None) -> Callable[..., Any]:
-        """Decorador declarativo para métodos de eventos dentro de uma subclasse de Cog."""
+        """Declarative decorator for event listener methods inside a Cog subclass."""
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             func._cog_listener = name or func.__name__
@@ -25,7 +25,7 @@ class Cog:
         return decorator
 
     def event(self, func: Callable[..., Any]) -> Callable[..., Any]:
-        """Registra um evento diretamente no bot associado à Cog."""
+        """Registers an event handler directly on the bot associated with this Cog."""
         event_name = func.__name__
         if self.bot:
             self.bot.event_handler.register(event_name, func)
@@ -40,7 +40,7 @@ class Cog:
         aliases: Optional[List[str]] = None,
         **kwargs: Any,
     ) -> Callable[..., Any]:
-        """Registra um comando diretamente no bot associado à Cog."""
+        """Registers a command directly on the bot associated with this Cog."""
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             if self.bot:

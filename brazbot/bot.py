@@ -1,13 +1,13 @@
 """
-Núcleo principal do Bot e Cliente Gateway v10 da biblioteca brazbot.py (`DiscordBot` / `Bot`).
-Implementa:
-- Conexão WebSocket Gateway v10 (`wss://gateway.discord.gg/?v=10&encoding=json`) com suporte a Zlib-stream opcional
-- Suporte completo a RESUME (Opcode 6), RECONNECT (Opcode 7), INVALID_SESSION (Opcode 9), HEARTBEAT (Opcode 1/11)
-  com cálculo de latência (`bot.latency`) e reconexão inteligente usando `resume_gateway_url`
-- Rastreamento automático de `voice_states` em `GUILD_CREATE` e `VOICE_STATE_UPDATE` para que `ctx.author.voice.channel`
-  esteja sempre disponível nos comandos de voz e música
-- Roteamento preciso de `INTERACTION_CREATE` (Slash Commands type=2, Buttons/Dropdowns type=3, Autocomplete type=4, Modals type=5)
-- Compatibilidade total com `DiscordBot` e `Bot`, `await bot.start()` e `bot.run()`.
+Core Bot and Gateway v10 Client for the brazbot.py library (`DiscordBot` / `Bot`).
+Implements:
+- Gateway v10 WebSocket connection (`wss://gateway.discord.gg/?v=10&encoding=json`) with optional Zlib-stream compression
+- Full support for RESUME (Opcode 6), RECONNECT (Opcode 7), INVALID_SESSION (Opcode 9), HEARTBEAT (Opcode 1/11)
+  with latency measurement (`bot.latency`) and smart reconnection using `resume_gateway_url`
+- Real-time tracking of `voice_states` in `GUILD_CREATE` and `VOICE_STATE_UPDATE` so `ctx.author.voice.channel`
+  is always populated in voice and music commands
+- Accurate routing of `INTERACTION_CREATE` (Slash Commands type=2, Buttons/Dropdowns type=3, Autocomplete type=4, Modals type=5)
+- Full compatibility with `DiscordBot` and `Bot`, `await bot.start()`, and `bot.run()`.
 """
 
 import asyncio
@@ -23,27 +23,27 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 import aiohttp
 from aiohttp import ClientResponseError
 
-from brazbot.audit_log_entry import AuditLogEntry
 from brazbot.cache import Cache
-from brazbot.channels import Channel, VoiceChannel, channel_factory
-from brazbot.commands import CommandContext, CommandHandler
+from brazbot.channels import Channel
+from brazbot.commands import CommandHandler
 from brazbot.decorators import tasks
 from brazbot.events import EventHandler
 from brazbot.eventstype import EventTypes
 from brazbot.guilds import Guild
 from brazbot.http import BASE_URL, HTTPClient
-from brazbot.member import Member, VoiceState
+from brazbot.member import VoiceState
 from brazbot.message_handler import MessageHandler
+from brazbot.moderation import ModerationGuard
 from brazbot.music import GuildMusicPlayer
-from brazbot.permissions import INTENTS, Intents
+from brazbot.permissions import Intents
 
 logger = logging.getLogger(__name__)
 
 
 class DiscordBot:
     """
-    Cliente principal para criação de bots na API v10 do Discord.
-    Conecta-se diretamente ao Gateway v10 e à API REST v10 do Discord sem depender de bibliotecas terceiras de bots.
+    Primary client for building Discord API v10 bots.
+    Connects directly to the Discord Gateway v10 and REST API v10 without third-party bot libraries.
     """
 
     def __init__(
@@ -81,6 +81,7 @@ class DiscordBot:
         self.event_handler = EventHandler(self)
         self.command_handler = CommandHandler(self)
         self.message_handler = MessageHandler(self.token, http_client=self.http)
+        self.moderation = ModerationGuard(self)
         self._ttl_cache = Cache()
         self.cache: Dict[str, Dict[str, Any]] = {}
 
@@ -95,7 +96,7 @@ class DiscordBot:
         self.eventtypes = tuple(event_type.name for event_type in EventTypes)
         self.wait_for_futures: List[Tuple[asyncio.Future, Callable[[Dict[str, Any]], bool]]] = []
 
-        # Estado em tempo real de servidores, canais, estados de voz e players de música
+        # Real-time state for guilds, channels, voice states, and music players
         self.guilds_data: Dict[str, Dict[str, Any]] = {}
         self.voice_states: Dict[str, Dict[str, Dict[str, Any]]] = {}
         self.voice_clients: Dict[str, Any] = {}
@@ -112,7 +113,7 @@ class DiscordBot:
 
         self.auto_register_events()
 
-    # ==================== GERENCIAMENTO DE CACHE ====================
+    # ==================== CACHE MANAGEMENT ====================
 
     def get_cache_data(self, key: str) -> Any:
         if key in self.cache:
@@ -152,7 +153,7 @@ class DiscordBot:
             self.delete_cache_data(key)
         self._ttl_cache.cleanup()
 
-    # ==================== INTENTS, EVENTOS, COMANDOS E COGS ====================
+    # ==================== INTENTS, EVENTS, COMMANDS, AND COGS ====================
 
     def calculate_intents(self, intents: Union[None, int, Intents, Iterable[str]]) -> int:
         return Intents.resolve(intents)
@@ -178,7 +179,7 @@ class DiscordBot:
         return decorator
 
     def user_command(self, name: Optional[str] = None) -> Callable[..., Any]:
-        """Registra um comando de Menu de Contexto de Usuário (`type=2` USER)."""
+        """Registers a User Context Menu command (`type=2` USER)."""
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             self.command_handler.register_command(func, name=name, cmd_type=2)
@@ -187,7 +188,7 @@ class DiscordBot:
         return decorator
 
     def message_command(self, name: Optional[str] = None) -> Callable[..., Any]:
-        """Registra um comando de Menu de Contexto de Mensagem (`type=3` MESSAGE)."""
+        """Registers a Message Context Menu command (`type=3` MESSAGE)."""
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             self.command_handler.register_command(func, name=name, cmd_type=3)
@@ -198,13 +199,13 @@ class DiscordBot:
     def register_component_callback(
         self, custom_id: str, callback: Callable[..., Any]
     ) -> None:
-        """Registra um callback automático para um `Button` ou `Dropdown` pelo `custom_id`."""
+        """Registers an automatic callback for a `Button` or `Dropdown` by `custom_id`."""
         self.component_callbacks[str(custom_id)] = callback
 
     def register_modal_callback(
         self, custom_id: str, callback: Callable[..., Any]
     ) -> None:
-        """Registra um callback automático para submissão de um `Form` (Modal) pelo `custom_id`."""
+        """Registers an automatic callback for a `Form` (Modal) submission by `custom_id`."""
         self.modal_callbacks[str(custom_id)] = callback
 
     def auto_register_events(self) -> None:
@@ -242,10 +243,10 @@ class DiscordBot:
                 return True
         return False
 
-    # ==================== HELPERS DE VOZ, MÚSICA E RECURSOS ====================
+    # ==================== VOICE, MUSIC, AND RESOURCE HELPERS ====================
 
     def get_member_voice_state(self, guild_id: str, user_id: str) -> Optional[VoiceState]:
-        """Obtém o `VoiceState` em cache de um membro em um servidor."""
+        """Retrieves the cached `VoiceState` of a member in a guild."""
         g_states = self.voice_states.get(str(guild_id), {})
         vs_data = g_states.get(str(user_id))
         if vs_data and vs_data.get("channel_id"):
@@ -253,7 +254,7 @@ class DiscordBot:
         return None
 
     def get_music_player(self, guild_id: str) -> GuildMusicPlayer:
-        """Obtém ou cria o reprodutor de música (`GuildMusicPlayer`) de um servidor."""
+        """Gets or creates the `GuildMusicPlayer` for a guild."""
         gid = str(guild_id)
         if gid not in self.music_players:
             self.music_players[gid] = GuildMusicPlayer(self, gid)
@@ -266,16 +267,15 @@ class DiscordBot:
         return await Channel.from_channel_id(self, guild_id, str(channel_id))
 
     async def setup_hook(self) -> None:
-        """Hook assíncrono executado antes de conectar ao Gateway."""
+        """Asynchronous hook executed before connecting to the Gateway."""
         pass
 
-    # ==================== GATEWAY v10 HEARTBEAT, PRESENCE E EVENTOS ====================
+    # ==================== GATEWAY v10 HEARTBEAT, PRESENCE, AND EVENTS ====================
 
     async def send_heartbeat(self, ws: aiohttp.ClientWebSocketResponse) -> None:
         if not self.heartbeat_interval:
             return
-        # Jitter inicial recomendado pela documentação do Gateway v10
-        await asyncio.sleep( (self.heartbeat_interval / 1000.0) * random.uniform(0.1, 0.5) )
+        await asyncio.sleep((self.heartbeat_interval / 1000.0) * random.uniform(0.1, 0.5))
         while not ws.closed and not self._closing:
             try:
                 self._last_heartbeat_sent = time.perf_counter()
@@ -284,7 +284,7 @@ class DiscordBot:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.debug(f"Erro ao enviar heartbeat: {e}")
+                logger.debug(f"Error sending heartbeat: {e}")
                 break
 
     async def handle_rate_limit(self, response: Any) -> None:
@@ -306,7 +306,7 @@ class DiscordBot:
         afk: bool = False,
     ) -> None:
         """
-        Atualiza a presença/status do bot pelo WebSocket ativo do Gateway (Opcode 3).
+        Updates the bot's presence/status over the active Gateway WebSocket (Opcode 3).
         """
         activity: Dict[str, Any] = {
             "name": str(activity_name),
@@ -333,7 +333,7 @@ class DiscordBot:
         check: Optional[Callable[[Dict[str, Any]], bool]] = None,
         timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
-        """Aguarda a chegada de um evento do Gateway que satisfaça a condição `check`."""
+        """Waits for a Gateway event matching `event_type` and `check`."""
         loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
 
@@ -358,7 +358,7 @@ class DiscordBot:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Erro ao processar mensagem do Gateway: {e}", exc_info=True)
+                logger.error(f"Error processing Gateway message: {e}", exc_info=True)
 
     async def process_message(self, raw_message: Union[str, Dict[str, Any]]) -> None:
         message = json.loads(raw_message) if isinstance(raw_message, str) else raw_message
@@ -389,14 +389,14 @@ class DiscordBot:
 
         # Opcode 7: RECONNECT
         elif op == 7:
-            logger.info("Gateway solicitou RECONNECT (Opcode 7). Reconectando com RESUME...")
+            logger.info("Gateway requested RECONNECT (Opcode 7). Reconnecting with RESUME...")
             if self._ws and not self._ws.closed:
                 await self._ws.close()
 
         # Opcode 9: INVALID_SESSION
         elif op == 9:
             resumable = bool(d)
-            logger.warning(f"Gateway enviou INVALID_SESSION (resumable={resumable}).")
+            logger.warning(f"Gateway sent INVALID_SESSION (resumable={resumable}).")
             if not resumable:
                 self.session_id = None
                 self.sequence = None
@@ -405,7 +405,7 @@ class DiscordBot:
             if self._ws and not self._ws.closed:
                 await self._ws.close()
 
-        # Eventos de Dispatch (op == 0)
+        # Dispatch Events (op == 0)
         if t == "READY" and isinstance(d, dict):
             self.resume_gateway_url = d.get("resume_gateway_url")
             if self.resume_gateway_url:
@@ -418,7 +418,7 @@ class DiscordBot:
             await self.event_handler.handle_event({"t": "on_ready", "d": d})
 
         elif t == "RESUMED":
-            logger.info("Sessão do Gateway retomada com sucesso (RESUMED).")
+            logger.info("Gateway session resumed successfully (RESUMED).")
             await self.event_handler.handle_event({"t": "on_resumed", "d": d})
 
         elif t == "GUILD_CREATE" and isinstance(d, dict):
@@ -537,20 +537,19 @@ class DiscordBot:
             await self.event_handler.handle_event({"t": "on_error", "d": d})
 
         elif t:
-            # Despacha qualquer outro evento documentado da API v10 (ex.: on_guild_member_add, on_message_delete)
             asyncio.create_task(self.event_handler.handle_event(message))
 
-        # Notifica aguardadores de `wait_for`
+        # Resolve `wait_for` futures
         for future, check in list(self.wait_for_futures):
             if not future.done() and check(message):
                 future.set_result(message)
                 if (future, check) in self.wait_for_futures:
                     self.wait_for_futures.remove((future, check))
 
-    # ==================== CICLO DE VIDA DA CONEXÃO ====================
+    # ==================== CONNECTION LIFECYCLE ====================
 
     async def start(self, token: Optional[str] = None) -> None:
-        """Inicia o loop principal assíncrono do bot no Gateway v10."""
+        """Starts the main asynchronous Gateway v10 loop."""
         if token:
             self.token = token
             self.http.token = token
@@ -586,7 +585,7 @@ class DiscordBot:
                                     },
                                 }
                             )
-                            logger.info(f"Enviando RESUME (session_id={self.session_id}, seq={self.sequence})")
+                            logger.info(f"Sending RESUME (session_id={self.session_id}, seq={self.sequence})")
                         else:
                             identify_payload = {
                                 "op": 2,
@@ -618,11 +617,11 @@ class DiscordBot:
                         if self.heartbeat_task:
                             self.heartbeat_task.cancel()
 
-                        # Códigos fatais do Gateway do Discord que não devem reconectar
+                        # Fatal Discord Gateway close codes that must not reconnect
                         if ws.close_code in (4004, 4010, 4011, 4012, 4013, 4014):
                             raise RuntimeError(
-                                f"Conexão encerrada pelo Discord com código fatal {ws.close_code} "
-                                "(verifique seu DISCORD_TOKEN e as Privileged Intents no Developer Portal)."
+                                f"Connection closed by Discord with fatal close code {ws.close_code} "
+                                "(verify your DISCORD_TOKEN and Privileged Intents in the Developer Portal)."
                             )
 
             except ClientResponseError as e:
@@ -630,14 +629,14 @@ class DiscordBot:
             except RuntimeError:
                 raise
             except Exception as e:
-                logger.error(f"Exceção na conexão com o Gateway: {e}")
+                logger.error(f"Exception in Gateway connection: {e}")
 
             if not self._closing:
-                logger.info("Reconectando ao Gateway em 5 segundos...")
+                logger.info("Reconnecting to Gateway in 5 seconds...")
                 await asyncio.sleep(5)
 
     async def close(self) -> None:
-        """Encerra todas as conexões de voz, Gateway e sessões HTTP limpamente."""
+        """Closes all voice connections, Gateway sockets, and HTTP sessions cleanly."""
         self._closing = True
         for vc in list(self.voice_clients.values()):
             try:
@@ -655,19 +654,19 @@ class DiscordBot:
         await self.http.close()
 
     def run(self, token: Optional[str] = None) -> None:
-        """Executa o bot de forma síncrona (compatível com `bot.run('TOKEN')` do README.md)."""
+        """Runs the bot synchronously (compatible with `bot.run('TOKEN')` in README.md)."""
         try:
             asyncio.run(self.start(token=token))
         except KeyboardInterrupt:
-            logger.info("Bot encerrado pelo usuário.")
+            logger.info("Bot stopped by user.")
 
 
-# Alias oficial para `from brazbot.bot import Bot`
+# Official alias for `from brazbot.bot import Bot`
 Bot = DiscordBot
 
 
 def main() -> None:
-    """Entrypoint de console para o comando `brazbot`."""
+    """Console entrypoint for the `brazbot` CLI command."""
     from brazbot.cli import main as cli_main
 
     cli_main()

@@ -1,12 +1,12 @@
 """
-Suporte nativo a Enquetes (Polls) da API v10 do Discord.
+Native Polls support for Discord API v10.
 """
 
 from typing import Any, Dict, List, Optional, Union
 
 
 class PollMedia:
-    """Objeto de mídia (texto e emoji opcional) para pergunta ou resposta de Enquete."""
+    """Media object (text and optional emoji) for a Poll question or answer."""
 
     def __init__(
         self,
@@ -27,7 +27,7 @@ class PollMedia:
 
 
 class PollAnswer:
-    """Opção de resposta individual para uma Enquete (`Poll`)."""
+    """Individual answer option for a `Poll`."""
 
     def __init__(
         self,
@@ -47,8 +47,8 @@ class PollAnswer:
 
 class Poll:
     """
-    Construtor de Enquetes nativas da API v10 do Discord.
-    Pode ser passado em `ctx.send(..., poll=poll)` ou `channel.send(..., poll=poll)`.
+    Builder for native Discord API v10 Polls.
+    Can be passed to `ctx.send(..., poll=poll)` or `channel.send(..., poll=poll)`.
     """
 
     def __init__(
@@ -60,7 +60,7 @@ class Poll:
         layout_type: int = 1,
     ):
         self.question = PollMedia(question)
-        self.duration = max(1, min(768, int(duration_hours)))  # Até 32 dias (768h)
+        self.duration = max(1, min(768, int(duration_hours)))  # Up to 32 days (768h)
         self.allow_multiselect = bool(allow_multiselect)
         self.layout_type = int(layout_type)
         self.answers: List[PollAnswer] = []
@@ -90,7 +90,7 @@ class Poll:
 
     @staticmethod
     async def end_poll(bot: Any, channel_id: str, message_id: str) -> Dict[str, Any]:
-        """Encerra imediatamente uma enquete ativa (`POST /channels/{channel.id}/polls/{message.id}/expire`)."""
+        """Immediately expires an active poll (`POST /channels/{channel.id}/polls/{message.id}/expire`)."""
         return await bot.http.request(
             "POST", f"/channels/{channel_id}/polls/{message_id}/expire"
         )
@@ -104,7 +104,7 @@ class Poll:
         limit: int = 25,
         after: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Lista os usuários que votaram em uma resposta específica da enquete."""
+        """Lists users who voted for a specific poll answer."""
         params: Dict[str, Any] = {"limit": min(100, max(1, limit))}
         if after:
             params["after"] = after

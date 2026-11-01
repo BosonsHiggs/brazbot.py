@@ -1,6 +1,5 @@
 """
-Módulos auxiliares de decoradores de argumentos (`argument_descriptions`, `autocomplete`,
-`literal_arguments`, `optional_arguments`) mantidos para compatibilidade total.
+Helper argument description decorator module preserved for backwards compatibility.
 """
 
 from typing import Any, Callable, Optional

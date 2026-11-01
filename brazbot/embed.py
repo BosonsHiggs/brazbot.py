@@ -1,5 +1,5 @@
 """
-Construtor fluente de Embeds da API v10 do Discord com paleta de cores semânticas.
+Fluent Embed builder for Discord API v10 with semantic color presets.
 """
 
 import datetime
@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Union
 
 
 class EmbedColor:
-    """Paleta de cores oficiais do Discord para Embeds."""
+    """Official Discord color palette for Embeds."""
 
     DEFAULT = 0x000000
     BLURPLE = 0x5865F2
@@ -26,7 +26,7 @@ class EmbedColor:
 
 class Embed:
     """
-    Representa e constrói um Rich Embed da API v10 do Discord.
+    Represents and builds a Rich Embed for Discord API v10.
     """
 
     Color = EmbedColor

@@ -1,5 +1,5 @@
 """
-Menus de Seleção (Select Menus / Dropdowns) da API v10 do Discord:
+Select Menu components (Dropdowns) for Discord API v10:
 - `Dropdown` / `StringSelect` (Type 3)
 - `UserSelect` (Type 5)
 - `RoleSelect` (Type 6)
@@ -11,7 +11,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 
 class DropdownOption:
-    """Opção individual para um `Dropdown` / `StringSelect` (Type 3)."""
+    """Individual option for a `Dropdown` / `StringSelect` (Type 3)."""
 
     def __init__(
         self,
@@ -45,7 +45,7 @@ class DropdownOption:
 
 class Dropdown:
     """
-    Menu de seleção de texto (`STRING_SELECT` - Component Type 3) da API v10 do Discord.
+    String Select Menu (`STRING_SELECT` - Component Type 3) in Discord API v10.
     """
 
     def __init__(
@@ -94,28 +94,28 @@ class Dropdown:
 
 
 class UserSelect(Dropdown):
-    """Menu de seleção de Usuários (`USER_SELECT` - Component Type 5)."""
+    """User Select Menu (`USER_SELECT` - Component Type 5)."""
 
     def __init__(self, custom_id: str, placeholder: Optional[str] = None, **kwargs: Any):
         super().__init__(custom_id, placeholder=placeholder, select_type=5, **kwargs)
 
 
 class RoleSelect(Dropdown):
-    """Menu de seleção de Cargos (`ROLE_SELECT` - Component Type 6)."""
+    """Role Select Menu (`ROLE_SELECT` - Component Type 6)."""
 
     def __init__(self, custom_id: str, placeholder: Optional[str] = None, **kwargs: Any):
         super().__init__(custom_id, placeholder=placeholder, select_type=6, **kwargs)
 
 
 class MentionableSelect(Dropdown):
-    """Menu de seleção de Usuários e Cargos (`MENTIONABLE_SELECT` - Component Type 7)."""
+    """Mentionable (Users and Roles) Select Menu (`MENTIONABLE_SELECT` - Component Type 7)."""
 
     def __init__(self, custom_id: str, placeholder: Optional[str] = None, **kwargs: Any):
         super().__init__(custom_id, placeholder=placeholder, select_type=7, **kwargs)
 
 
 class ChannelSelect(Dropdown):
-    """Menu de seleção de Canais (`CHANNEL_SELECT` - Component Type 8)."""
+    """Channel Select Menu (`CHANNEL_SELECT` - Component Type 8)."""
 
     def __init__(
         self,

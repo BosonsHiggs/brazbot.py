@@ -1,5 +1,5 @@
 """
-Modelo de Tópico (Thread) da API v10 do Discord.
+Thread model for Discord API v10.
 """
 
 from datetime import datetime, timezone
@@ -9,7 +9,7 @@ from brazbot.snowflake import Snowflake
 
 
 class Thread:
-    """Representa uma Thread (pública, privada ou de anúncios) na API v10 do Discord."""
+    """Represents a Thread (public, private, or announcement) in Discord API v10."""
 
     def __init__(self, data: Dict[str, Any], bot: Any = None):
         self._raw = data or {}

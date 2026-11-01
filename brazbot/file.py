@@ -1,5 +1,5 @@
 """
-Classe utilitária para envio de arquivos locais (`File`) na API v10 do Discord.
+Utility class for uploading local files (`File`) in Discord API v10.
 """
 
 import mimetypes
@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional, Union
 
 
 class File:
-    """Representa um arquivo local ou buffer em memória para envio ao Discord."""
+    """Represents a local file or in-memory buffer for uploading to Discord."""
 
     def __init__(
         self,

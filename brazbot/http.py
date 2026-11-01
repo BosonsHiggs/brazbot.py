@@ -1,14 +1,14 @@
 """
-Cliente HTTP assíncrono centralizado para comunicação direta com a API v10 do Discord.
-Implementa:
-- Cabeçalho oficial `User-Agent: DiscordBot (url, version)` exigido pela documentação do Discord
-- Rate Limiting Preventivo (Pre-emptive Bucket Throttling) compatível com as diretrizes oficiais (meew0):
-  * Agrupa rotas por `( HTTP Method, Rota Normalizada, Major Parameter: guild_id / channel_id / webhook_id )`
-  * Mapeia dinamicamente para hashes `X-RateLimit-Bucket` retornados pelo Discord
-  * Bloqueia preventivamente o bucket quando `X-RateLimit-Remaining == 0` pelo tempo exato de `X-RateLimit-Reset-After`
-    para **evitar gerar respostas HTTP 429**
-  * Trava global (`_global_lock`) para `X-RateLimit-Global`
-- Pool de conexões persistente (`aiohttp.ClientSession`), retentativas automáticas em erros 5xx e upload multipart.
+Centralized asynchronous HTTP client for direct communication with Discord API v10.
+Implements:
+- Official `User-Agent: DiscordBot (url, version)` header required by Discord documentation
+- Pre-emptive Bucket Rate Limiting compliant with official Discord API library guidelines (meew0):
+  * Groups routes by `(HTTP Method, Normalized Route, Major Parameter: guild_id / channel_id / webhook_id)`
+  * Dynamically maps routes to `X-RateLimit-Bucket` hashes returned by Discord
+  * Pre-emptively locks the bucket when `X-RateLimit-Remaining == 0` for `X-RateLimit-Reset-After` seconds
+    to **prevent generating HTTP 429 responses**
+  * Global rate-limit lock (`_global_lock`) for `X-RateLimit-Global`
+- Persistent connection pooling (`aiohttp.ClientSession`), automatic retries on 5xx errors, and multipart uploads.
 """
 
 import asyncio
@@ -17,7 +17,7 @@ import logging
 import re
 import time
 import urllib.parse
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import aiohttp
 from aiohttp import FormData
@@ -40,16 +40,16 @@ LIBRARY_URL = "https://github.com/BosonsHiggs/brazbot.py"
 LIBRARY_VERSION = "2.0.0"
 USER_AGENT = f"DiscordBot ({LIBRARY_URL}, {LIBRARY_VERSION})"
 
-# Expressão regular para extrair parâmetros principais (major parameters) da rota Discord
+# Regular expressions to extract Discord major route parameters
 _MAJOR_PARAM_RE = re.compile(r"^/(channels|guilds|webhooks)/([0-9]{15,22}|@me)")
 _SNOWFLAKE_SUB_RE = re.compile(r"/[0-9]{15,22}")
 
 
 def compute_route_key(method: str, endpoint: str) -> str:
     """
-    Calcula a chave de rota normalizada respeitando os Major Parameters do Discord
+    Computes the normalized route key respecting Discord Major Parameters
     (`channel_id`, `guild_id`, `webhook_id`).
-    Demais Snowflakes na URL são substituídos por `:id` para compartilhar o mesmo bucket.
+    Minor Snowflakes in the URL are replaced with `:id` so they share the same rate-limit bucket.
     """
     clean_ep = "/" + endpoint.split("?")[0].lstrip("/")
     match = _MAJOR_PARAM_RE.match(clean_ep)
@@ -64,8 +64,8 @@ def compute_route_key(method: str, endpoint: str) -> str:
 
 class RateLimitBucket:
     """
-    Representa um bucket individual de Rate Limit da API v10 do Discord.
-    Garante que requisições aguardem preventivamente quando `remaining == 0`.
+    Represents an individual Discord API v10 Rate Limit bucket.
+    Ensures requests wait pre-emptively whenever `remaining == 0`.
     """
 
     def __init__(self, key: str):
@@ -73,25 +73,25 @@ class RateLimitBucket:
         self.lock = asyncio.Lock()
         self.limit: int = 1
         self.remaining: int = 1
-        self.reset_at: float = 0.0  # Timestamp monotônico de liberação do bucket
+        self.reset_at: float = 0.0  # Monotonic timestamp when the bucket resets
         self.reset_after: float = 0.0
         self.last_status: int = 200
 
     async def acquire_preemptive_wait(self) -> None:
-        """Se o bucket zerou (`remaining == 0`), aguarda até `reset_at` antes de disparar a requisição."""
+        """If the bucket is exhausted (`remaining == 0`), sleeps until `reset_at` before sending the request."""
         if self.remaining <= 0:
             now = time.monotonic()
             wait_seconds = self.reset_at - now
             if wait_seconds > 0:
                 logger.debug(
-                    f"[Pre-emptive RateLimit] Bucket '{self.key}' esgotado (remaining=0). "
-                    f"Aguardando {wait_seconds:.3f}s antes de enviar requisição."
+                    f"[Pre-emptive RateLimit] Bucket '{self.key}' exhausted (remaining=0). "
+                    f"Waiting {wait_seconds:.3f}s before dispatching request."
                 )
                 await asyncio.sleep(wait_seconds)
             self.remaining = 1
 
     def update_from_headers(self, headers: Any, status: int) -> None:
-        """Atualiza o estado do bucket a partir dos cabeçalhos HTTP `X-RateLimit-*`."""
+        """Updates bucket state from `X-RateLimit-*` HTTP response headers."""
         self.last_status = status
         limit_hdr = headers.get("X-RateLimit-Limit")
         rem_hdr = headers.get("X-RateLimit-Remaining")
@@ -117,8 +117,8 @@ class RateLimitBucket:
 
 class HTTPClient:
     """
-    Cliente HTTP de produção para a API v10 do Discord.
-    Reutiliza `aiohttp.ClientSession` e implementa Rate Limiting preventivo por bucket e global.
+    Production HTTP client for Discord API v10.
+    Reuses `aiohttp.ClientSession` and enforces pre-emptive per-bucket and global rate limiting.
     """
 
     def __init__(self, token: str, base_url: str = BASE_URL, max_retries: int = 5):
@@ -153,20 +153,20 @@ class HTTPClient:
         return self._buckets[full_bucket_id]
 
     async def get_session(self) -> aiohttp.ClientSession:
-        """Obtém ou cria a sessão HTTP persistente."""
+        """Gets or creates the persistent HTTP session."""
         if self._session is None or self._session.closed:
             timeout = aiohttp.ClientTimeout(total=60, connect=15)
             self._session = aiohttp.ClientSession(timeout=timeout)
         return self._session
 
     async def close(self) -> None:
-        """Fecha a sessão HTTP limpa e seguramente."""
+        """Closes the underlying HTTP session cleanly."""
         if self._session and not self._session.closed:
             await self._session.close()
             self._session = None
 
     def _normalize_files(self, files: List[Any]) -> List[Dict[str, Any]]:
-        """Normaliza diferentes formatos de arquivos (dict, File, bytes, caminho) para upload."""
+        """Normalizes various file representations (dict, File, bytes, file path) for multipart upload."""
         normalized: List[Dict[str, Any]] = []
         for idx, f in enumerate(files):
             if isinstance(f, dict):
@@ -246,7 +246,7 @@ class HTTPClient:
         raise_on_error: bool = True,
     ) -> Any:
         """
-        Executa uma requisição HTTP para a API v10 do Discord com Rate Limit preventivo e automático.
+        Executes an HTTP request to Discord API v10 with pre-emptive and automatic rate limiting.
         """
         url = full_url or f"{self.base_url}/{endpoint.lstrip('/')}"
         route_key = compute_route_key(method, endpoint or url)
@@ -266,9 +266,9 @@ class HTTPClient:
 
         async with bucket.lock:
             for attempt in range(self.max_retries):
-                # 1. Aguarda liberação de rate limit global (se ativo)
+                # 1. Wait for global rate limit lock if active
                 await self._global_lock.wait()
-                # 2. Aguarda preventivamente se o bucket local tiver zerado `X-RateLimit-Remaining`
+                # 2. Pre-emptively wait if the local bucket has 0 remaining requests
                 await bucket.acquire_preemptive_wait()
 
                 session = await self.get_session()
@@ -326,8 +326,8 @@ class HTTPClient:
                             bucket.remaining = 0
                             bucket.reset_at = time.monotonic() + retry_after
                             logger.warning(
-                                f"Rate limit 429 em {method} {endpoint} (scope={scope}, global={is_global}). "
-                                f"Aguardando {retry_after:.2f}s (tentativa {attempt + 1}/{self.max_retries})"
+                                f"Rate limit 429 on {method} {endpoint} (scope={scope}, global={is_global}). "
+                                f"Waiting {retry_after:.2f}s (attempt {attempt + 1}/{self.max_retries})"
                             )
                             if is_global:
                                 self._global_lock.clear()
@@ -342,8 +342,8 @@ class HTTPClient:
                         if response.status in (500, 502, 503, 504) and attempt < self.max_retries - 1:
                             backoff = 1.0 + attempt * 1.5
                             logger.warning(
-                                f"Erro de servidor Discord {response.status} em {method} {endpoint}. "
-                                f"Retentando em {backoff:.1f}s..."
+                                f"Discord server error {response.status} on {method} {endpoint}. "
+                                f"Retrying in {backoff:.1f}s..."
                             )
                             await asyncio.sleep(backoff)
                             continue
@@ -363,7 +363,7 @@ class HTTPClient:
                         err_details = err_data.get("errors") if isinstance(err_data, dict) else None
 
                         if not raise_on_error:
-                            logger.error(f"HTTP {response.status} em {method} {endpoint}: {err_msg}")
+                            logger.error(f"HTTP {response.status} on {method} {endpoint}: {err_msg}")
                             return None
 
                         if response.status == 400:
@@ -388,7 +388,7 @@ class HTTPClient:
                         await asyncio.sleep(1.0 + attempt)
                         continue
                     if not raise_on_error:
-                        logger.error(f"Erro de rede em {method} {endpoint}: {e}")
+                        logger.error(f"Network error on {method} {endpoint}: {e}")
                         return None
                     raise HTTPException(0, f"Network error: {e}") from e
 
@@ -397,7 +397,7 @@ class HTTPClient:
         raise RateLimited(1.0)
 
     def get_rate_limit_snapshot(self) -> List[Dict[str, Any]]:
-        """Retorna o estado atual de todos os buckets rastreados sem fazer requisições desnecessárias."""
+        """Returns the current state of all tracked rate-limit buckets without making extra HTTP calls."""
         now = time.monotonic()
         snapshot: List[Dict[str, Any]] = []
         for b in self._buckets.values():

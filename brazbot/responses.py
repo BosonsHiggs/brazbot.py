@@ -1,12 +1,12 @@
 """
-Objeto de Resposta de Interação (`InteractionResponse`) para a API v10 do Discord.
+Interaction Response object (`InteractionResponse`) for Discord API v10.
 """
 
 from typing import Any, Dict, List, Optional
 
 
 class InteractionResponse:
-    """Encapsula respostas diretas a uma interação recebida na API v10 do Discord."""
+    """Encapsulates direct responses to an incoming interaction in Discord API v10."""
 
     def __init__(self, bot: Any, message: Dict[str, Any]):
         self.bot = bot

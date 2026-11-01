@@ -1,6 +1,6 @@
 """
-Decoradores para controle de permissões, sincronização de comandos Slash,
-tarefas periódicas (tasks), rate limiting (cooldown) e metadados de parâmetros.
+Decorators for permission checks, Slash Command synchronization, periodic background tasks,
+rate limiting (cooldowns), and parameter descriptions.
 """
 
 import asyncio
@@ -10,7 +10,7 @@ from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 
 from brazbot.cache import Cache
-from brazbot.permissions import PERMISSION_FLAGS, Permissions
+from brazbot.permissions import Permissions
 
 logger = logging.getLogger(__name__)
 cache = Cache()
@@ -18,7 +18,7 @@ _SYNCED_TARGETS: Set[str] = set()
 
 
 def tasks(seconds: float = 120.0, run_immediately: bool = False) -> Callable[..., Any]:
-    """Executa uma corrotina periodicamente a cada `seconds` segundos em background."""
+    """Executes an asynchronous coroutine periodically every `seconds` seconds in the background."""
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
@@ -27,7 +27,7 @@ def tasks(seconds: float = 120.0, run_immediately: bool = False) -> Callable[...
                 try:
                     await func(*args, **kwargs)
                 except Exception as e:
-                    logger.error(f"Erro na tarefa periódica {func.__name__}: {e}")
+                    logger.error(f"Error in background task {func.__name__}: {e}")
             while True:
                 await asyncio.sleep(seconds)
                 try:
@@ -35,7 +35,7 @@ def tasks(seconds: float = 120.0, run_immediately: bool = False) -> Callable[...
                 except asyncio.CancelledError:
                     break
                 except Exception as e:
-                    logger.error(f"Erro na tarefa periódica {func.__name__}: {e}")
+                    logger.error(f"Error in background task {func.__name__}: {e}")
 
         wrapper._is_task = True  # type: ignore[attr-defined]
         wrapper._task_interval = seconds  # type: ignore[attr-defined]
@@ -49,9 +49,9 @@ def sync_slash_commands(
     force_on_invoke: bool = False,
 ) -> Callable[..., Any]:
     """
-    Marca o comando para sincronização de Slash Commands (Global, Servidor único ou Lista de servidores).
-    Por padrão, registra os alvos de sincronização no bot para que sejam sincronizados na inicialização
-    (evitando atingir rate limits da API em toda execução de comando).
+    Marks a command for Slash Command synchronization (Global, Single Guild, or List of Guilds).
+    By default, commands are synced on startup (`on_ready` / `setup_hook`) to avoid hitting rate limits
+    on every command invocation.
     """
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -59,7 +59,6 @@ def sync_slash_commands(
         async def wrapper(ctx: Any, *args: Any, **kwargs: Any) -> Any:
             result = await func(ctx, *args, **kwargs)
 
-            # Só sincroniza na invocação se explicitamente forçado ou se o comando for o próprio `/sync`
             should_sync = force_on_invoke or getattr(func, "__name__", "").startswith("sync")
             if not should_sync:
                 return result
@@ -70,14 +69,14 @@ def sync_slash_commands(
                         await ctx.bot.command_handler.sync_commands()
                         _SYNCED_TARGETS.add("GLOBAL")
                     except Exception as e:
-                        logger.error(f"Erro na sincronização global: {e}")
+                        logger.error(f"Global command sync error: {e}")
             elif isinstance(guild_id, str):
                 if guild_id not in _SYNCED_TARGETS or force_on_invoke:
                     try:
                         await ctx.bot.command_handler.sync_commands(guild_id=guild_id)
                         _SYNCED_TARGETS.add(guild_id)
                     except Exception as e:
-                        logger.error(f"Erro ao sincronizar servidor {guild_id}: {e}")
+                        logger.error(f"Error syncing commands in guild {guild_id}: {e}")
             elif isinstance(guild_id, list):
                 for gid in guild_id:
                     if gid not in _SYNCED_TARGETS or force_on_invoke:
@@ -85,7 +84,7 @@ def sync_slash_commands(
                             await ctx.bot.command_handler.sync_commands(guild_id=gid)
                             _SYNCED_TARGETS.add(gid)
                         except Exception as e:
-                            logger.error(f"Erro no servidor {gid}: {e}")
+                            logger.error(f"Error syncing commands in guild {gid}: {e}")
             return result
 
         wrapper._slash_command = True  # type: ignore[attr-defined]
@@ -96,17 +95,17 @@ def sync_slash_commands(
 
 
 def sync_commands(guilds: Optional[Union[str, List[str]]] = None) -> Callable[..., Any]:
-    """Alias curto para `sync_slash_commands`."""
+    """Short alias for `sync_slash_commands`."""
     return sync_slash_commands(guild_id=guilds)
 
 
 def sync_test_servers(guild_ids: List[str]) -> Callable[..., Any]:
-    """Sincroniza comandos em uma lista de servidores de teste."""
+    """Synchronizes slash commands across a list of test guilds."""
     return sync_slash_commands(guild_id=guild_ids)
 
 
 def describe(**descriptions: str) -> Callable[..., Any]:
-    """Define descrições detalhadas para os parâmetros de um comando Slash."""
+    """Attaches parameter descriptions to a Slash Command."""
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         if not hasattr(func, "parameter_descriptions"):
@@ -138,7 +137,7 @@ async def _fetch_cached_guild_roles(bot: Any, guild_id: str) -> List[Dict[str, A
 
 
 def is_admin() -> Callable[..., Any]:
-    """Restringe o comando a Administradores ou ao Dono do Servidor."""
+    """Restricts command execution to Guild Administrators or the Guild Owner."""
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(func)
@@ -163,7 +162,7 @@ def is_admin() -> Callable[..., Any]:
                 {
                     "t": "on_error",
                     "d": {
-                        "message": "Você precisa ser um administrador ou o dono do servidor para usar este comando.",
+                        "message": "You must be an administrator or the server owner to use this command.",
                         "channel_id": ctx.channel_id,
                     },
                 }
@@ -176,7 +175,7 @@ def is_admin() -> Callable[..., Any]:
 
 
 def is_owner() -> Callable[..., Any]:
-    """Restringe o comando ao Dono do Servidor."""
+    """Restricts command execution to the Guild Owner."""
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(func)
@@ -193,7 +192,7 @@ def is_owner() -> Callable[..., Any]:
                 {
                     "t": "on_error",
                     "d": {
-                        "message": "Você precisa ser o dono do servidor para usar este comando.",
+                        "message": "You must be the server owner to use this command.",
                         "channel_id": ctx.channel_id,
                     },
                 }
@@ -206,7 +205,7 @@ def is_owner() -> Callable[..., Any]:
 
 
 def has_role(role_name_or_id: str) -> Callable[..., Any]:
-    """Restringe o comando a membros que possuam um cargo específico (por nome ou ID)."""
+    """Restricts command execution to members who hold a specific role (by name or ID)."""
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(func)
@@ -231,7 +230,7 @@ def has_role(role_name_or_id: str) -> Callable[..., Any]:
                 {
                     "t": "on_error",
                     "d": {
-                        "message": f"Você precisa do cargo '{role_name_or_id}' para usar este comando.",
+                        "message": f"You need the '{role_name_or_id}' role to use this command.",
                         "channel_id": ctx.channel_id,
                     },
                 }
@@ -245,8 +244,8 @@ def has_role(role_name_or_id: str) -> Callable[..., Any]:
 
 def has_permissions(**required_perms: bool) -> Callable[..., Any]:
     """
-    Verifica se o autor do comando possui todas as permissões da API v10 especificadas
-    (ex.: `@has_permissions(ban_members=True, manage_messages=True)`).
+    Verifies that the command author holds all specified Discord API v10 permissions
+    (e.g., `@has_permissions(ban_members=True, manage_messages=True)`).
     """
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -254,7 +253,7 @@ def has_permissions(**required_perms: bool) -> Callable[..., Any]:
         async def wrapper(ctx: Any, *args: Any, **kwargs: Any) -> Any:
             guild_id = ctx.guild_id
             if not guild_id:
-                await ctx.reply("❌ Este comando só pode ser executado em um servidor.", ephemeral=True)
+                await ctx.reply("❌ This command can only be executed inside a server.", ephemeral=True)
                 return None
 
             author_id = str(ctx.author["id"]) if ctx.author else ""
@@ -262,7 +261,6 @@ def has_permissions(**required_perms: bool) -> Callable[..., Any]:
             if str(guild_info.get("owner_id")) == author_id:
                 return await func(ctx, *args, **kwargs)
 
-            # Se a interação já enviou resolved permissions
             if ctx.member and ctx.member.get("permissions"):
                 perm_obj = Permissions(ctx.member["permissions"])
             else:
@@ -283,7 +281,7 @@ def has_permissions(**required_perms: bool) -> Callable[..., Any]:
                 {
                     "t": "on_error",
                     "d": {
-                        "message": f"Permissões insuficientes. Necessário: {missing_str}",
+                        "message": f"Insufficient permissions. Required: {missing_str}",
                         "channel_id": ctx.channel_id,
                     },
                 }
@@ -296,13 +294,13 @@ def has_permissions(**required_perms: bool) -> Callable[..., Any]:
 
 
 def guild_only() -> Callable[..., Any]:
-    """Garante que o comando só seja executado dentro de um servidor (não em DMs)."""
+    """Ensures the command can only be executed inside a server (not in DMs)."""
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(func)
         async def wrapper(ctx: Any, *args: Any, **kwargs: Any) -> Any:
             if not ctx.guild_id:
-                await ctx.reply("❌ Este comando só pode ser usado dentro de um servidor.", ephemeral=True)
+                await ctx.reply("❌ This command can only be used inside a server.", ephemeral=True)
                 return None
             return await func(ctx, *args, **kwargs)
 
@@ -312,14 +310,14 @@ def guild_only() -> Callable[..., Any]:
 
 
 def in_voice_channel() -> Callable[..., Any]:
-    """Garante que o usuário que invocou o comando esteja conectado a um canal de voz."""
+    """Ensures the invoking user is currently connected to a voice channel."""
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(func)
         async def wrapper(ctx: Any, *args: Any, **kwargs: Any) -> Any:
             if not ctx.author or not getattr(ctx.author, "voice", None) or not ctx.author.voice.channel:
                 await ctx.reply(
-                    "❌ Você precisa estar conectado a um canal de voz para usar este comando!",
+                    "❌ You must be connected to a voice channel to use this command!",
                     ephemeral=True,
                 )
                 return None
@@ -332,8 +330,8 @@ def in_voice_channel() -> Callable[..., Any]:
 
 def rate_limit(limit: int, per: float, scope: str = "user") -> Callable[..., Any]:
     """
-    Aplica limite de uso (cooldown) por usuário (`user`), canal (`channel`) ou servidor (`guild`).
-    Informa o tempo restante exato quando o limite é atingido.
+    Applies a command cooldown per user (`user`), channel (`channel`), or server (`guild`).
+    Reports the exact remaining time when the cooldown limit is reached.
     """
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -354,7 +352,7 @@ def rate_limit(limit: int, per: float, scope: str = "user") -> Callable[..., Any
                     {
                         "t": "on_error",
                         "d": {
-                            "message": "Você atingiu o limite de uso deste comando.",
+                            "message": "You have reached the rate limit for this command.",
                             "time_left": time_left,
                             "channel_id": ctx.channel_id,
                         },
@@ -379,7 +377,7 @@ def command(
     description: Optional[str] = None,
     aliases: Optional[List[str]] = None,
 ) -> Callable[..., Any]:
-    """Decorador standalone para marcar uma função como comando (para uso em Cogs ou scripts)."""
+    """Standalone decorator to mark a function as a command (for use in Cogs or scripts)."""
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         func._command = {  # type: ignore[attr-defined]

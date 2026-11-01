@@ -1,5 +1,5 @@
 """
-Formulários Modais (`Form`, `FormField`) da API v10 do Discord (Interaction Callback Type 9).
+Modal Forms (`Form`, `FormField`) for Discord API v10 (Interaction Callback Type 9).
 """
 
 from typing import Any, Callable, Dict, List, Optional
@@ -7,8 +7,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 class FormField:
     """
-    Campo de entrada de texto (`TEXT_INPUT` - Component Type 4) para um Modal (`Form`).
-    `style=1` para linha curta (Short), `style=2` para parágrafo (Paragraph).
+    Text Input field (`TEXT_INPUT` - Component Type 4) for a Modal (`Form`).
+    `style=1` for single-line Short input, `style=2` for multi-line Paragraph input.
     """
 
     def __init__(
@@ -59,7 +59,7 @@ class FormField:
 
 class Form:
     """
-    Representa um Modal interativo da API v10 do Discord (Interaction Callback Type 9).
+    Represents an interactive Modal in Discord API v10 (Interaction Callback Type 9).
     """
 
     def __init__(

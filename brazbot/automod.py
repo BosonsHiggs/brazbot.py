@@ -1,5 +1,5 @@
 """
-Suporte completo ao sistema de AutoModeração (AutoMod) da API v10 do Discord.
+Full AutoModeration (AutoMod) support for Discord API v10.
 """
 
 from enum import IntEnum
@@ -28,7 +28,7 @@ class AutoModKeywordPresetType(IntEnum):
 
 
 class AutoModRule:
-    """Representa e gerencia uma regra de AutoModeração na API v10 do Discord."""
+    """Represents and manages an AutoModeration rule in Discord API v10."""
 
     def __init__(self, data: Dict[str, Any], bot: Any = None):
         self._raw = data or {}

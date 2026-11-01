@@ -1,15 +1,15 @@
 """
-Sistema de cache em memória com expiração por TTL (Time-To-Live) e limite opcional de entradas.
+In-memory cache system with Time-To-Live (TTL) expiration and optional size cap.
 """
 
 import time
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List, Optional
 
 
 class Cache:
     """
-    Gerenciador de cache em memória com suporte a TTL (em segundos) e limpeza automática.
-    Compatível tanto com `ttl=` quanto com `seconds=`.
+    In-memory cache manager supporting TTL expiration (in seconds) and automatic cleanup.
+    Accepts both `ttl=` and `seconds=` keyword arguments for backwards compatibility.
     """
 
     def __init__(self, default_ttl: float = 300.0, max_size: int = 10000):
@@ -25,7 +25,7 @@ class Cache:
         ttl: Optional[float] = None,
         seconds: Optional[float] = None,
     ) -> None:
-        """Armazena um valor no cache com tempo de expiração em segundos."""
+        """Stores a value in the cache with an expiration time in seconds."""
         if len(self.cache) >= self.max_size and key not in self.cache:
             self.cleanup()
             if len(self.cache) >= self.max_size:
@@ -37,7 +37,7 @@ class Cache:
         self.expiry_times[key] = time.time() + float(effective_ttl)
 
     def get(self, key: str, default: Any = None) -> Any:
-        """Obtém um valor do cache se existir e não estiver expirado."""
+        """Retrieves a cached value if it exists and has not expired."""
         if key in self.cache:
             if time.time() < self.expiry_times.get(key, 0):
                 return self.cache[key]
@@ -45,7 +45,7 @@ class Cache:
         return default
 
     def get_remaining_ttl(self, key: str) -> float:
-        """Retorna o tempo restante (em segundos) para a chave expirar, ou 0.0."""
+        """Returns the remaining time (in seconds) before the key expires, or 0.0."""
         if key in self.cache:
             rem = self.expiry_times.get(key, 0) - time.time()
             if rem > 0:
@@ -54,24 +54,24 @@ class Cache:
         return 0.0
 
     def update(self, key: str, value: Any) -> bool:
-        """Atualiza o valor de uma chave existente mantendo seu TTL atual."""
+        """Updates the value of an existing key while preserving its current TTL."""
         if key in self.cache and time.time() < self.expiry_times.get(key, 0):
             self.cache[key] = value
             return True
         return False
 
     def delete(self, key: str) -> None:
-        """Remove uma chave do cache."""
+        """Deletes a key from the cache."""
         self.cache.pop(key, None)
         self.expiry_times.pop(key, None)
 
     def clear(self) -> None:
-        """Limpa todo o cache."""
+        """Clears all entries from the cache."""
         self.cache.clear()
         self.expiry_times.clear()
 
     def cleanup(self) -> int:
-        """Remove todas as entradas expiradas e retorna a quantidade removida."""
+        """Removes all expired keys and returns the number of removed entries."""
         now = time.time()
         expired_keys: List[str] = [
             k for k, exp in list(self.expiry_times.items()) if exp <= now

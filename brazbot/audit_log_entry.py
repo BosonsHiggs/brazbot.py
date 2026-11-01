@@ -1,15 +1,15 @@
 """
-Modelo de Entrada de Log de Auditoria (`AuditLogEntry`) da API v10 do Discord.
+Audit Log Entry model (`AuditLogEntry`) for Discord API v10.
 """
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from brazbot.snowflake import Snowflake
 
 
 class AuditLogEntry:
-    """Representa um registro do Log de Auditoria de um servidor na API v10 do Discord."""
+    """Represents a Guild Audit Log entry in Discord API v10."""
 
     def __init__(
         self,
